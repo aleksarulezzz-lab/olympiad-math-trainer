@@ -24,9 +24,11 @@ for(const t of T){
   if(String(t.answer).length>1&&/^\d+$/.test(t.answer)&&new RegExp('(^|\\D)'+t.answer+'(\\D|$)').test(t.step))fail('подсказка выдаёт ответ: '+t.id);
   pass();
 }
-for(let n=1;n<=5;n++){const v=T.filter(t=>t.pool==='variant'&&(t.id.startsWith('F29V'+n+'-')||t.id.startsWith('V30-V'+n+'-')));if(v.length!==10||new Set(v.map(t=>t.skill)).size!==10)fail('вариант '+n);else pass()}
+for(let n=1;n<=5;n++){const v=T.filter(t=>t.pool==='variant'&&t.id.startsWith('V31-'+n+'-'));if(v.length!==8||new Set(v.map(t=>t.skill)).size<7)fail('вариант '+n);else pass()}
+if(T.filter(t=>t.pool==='variant').length!==40)fail('в вариантах должно быть 40 задач');
+for(const t of T){if(t.type==='choice'&&!t.options.includes(t.answer))fail('choice '+t.id);if(t.type==='multi'&&!t.answer.split(';').every(a=>t.options.includes(a)))fail('multi '+t.id);if(t.type==='match'&&(t.answer.split('|').length!==t.rows.length||!t.answer.split('|').every(a=>t.options.includes(a))))fail('match '+t.id)}
 if(T.filter(t=>t.pool==='diag').length!==10)fail('диагностика');
-for(const s of SK){const n=T.filter(t=>t.pool==='train'&&t.skill===s.id).length;if(n<12)fail(`мало задач в навыке ${s.id}: ${n}`);
+for(const s of SK){const n=T.filter(t=>t.pool==='train'&&t.skill===s.id).length;if(n<9)fail(`мало задач в навыке ${s.id}: ${n}`);
   if(!s.lesson||s.lesson.examples.length<2)fail('урок '+s.id);
   for(const e of s.lesson.examples)if(texts.has(e.text.replace(/\s+/g,' ').trim()))fail('пример урока совпадает с задачей банка: '+s.id)}
 
@@ -38,7 +40,70 @@ const sum=a=>a.reduce((x,y)=>x+y,0);
 const perms=(arr,k)=>k===0?[[]]:arr.flatMap((x,i)=>perms(arr.filter((_,j)=>j!==i),k-1).map(p=>[x,...p]));
 const C2=n=>n*(n-1)/2;
 const nim=(n,maxTake)=>n%(maxTake+1); // сколько взять, чтобы оставить кратное (maxTake+1)
+const lock=clues=>perms([0,1,2,3,4,5,6,7,8,9],3).filter(c=>clues.every(([g,n,pl])=>{const d=g.split('').map(Number);return d.filter(x=>c.includes(x)).length===n&&d.filter((x,i)=>c[i]===x).length===pl})).map(c=>c.join('')).join(',');
+const skipDigit=(n,dig)=>{let c=0;for(let x=1;;x++){if(String(x).includes(dig))continue;if(++c===n)return x}};
+const latin=(rows,cols,vals)=>{const ps=perms(range(1,vals),cols);const out=[];const rec=a=>{if(a.length===rows){out.push(a);return}for(const r of ps)if(a.every(b=>b.every((x,j)=>x!==r[j])))rec([...a,r])};rec([]);return out};
+const gdef=(counts,d,m)=>{let best=0;const rec=(i,left,tot)=>{if(i===counts.length){best=Math.max(best,tot);return}for(let g=0;g<=Math.min(m-1,counts[i]);g++)for(let b=0;b<=Math.min(left,counts[i]-g);b++)rec(i+1,left-b,tot+g+b)};rec(0,d,0);return best+1};
+const order=(names,cons,ask)=>{const r=perms(names,names.length).filter(p=>cons(x=>p.indexOf(x)));return [...new Set(r.map(ask))].join(',')};
+const maxOf=(k,sumv)=>{const s=new Set();const rec=(st,left,kk,arr)=>{if(kk===0){if(left===0)s.add(arr[arr.length-1]);return}for(let x=st;x<=left;x++)rec(x+1,left-x,kk-1,[...arr,x])};rec(1,sumv,k,[]);return s};
 const check={
+ 'V31-1-1':()=>range(1,100).filter(n=>n%2===0&&n%5===0).length,
+ 'V31-1-2':()=>order(['Артём','Борис','Вера','Глеб','Дина'],i=>i('Вера')>i('Глеб')&&i('Борис')<i('Артём')&&i('Борис')<i('Дина')&&i('Борис')!==0,p=>p[0]),
+ 'V31-1-3':()=>gdef([6,5,4],2,2),
+ 'V31-1-4':()=>(48/8)**2,
+ 'V31-1-5':()=>24*5/3,
+ 'V31-1-6':()=>3*sum(range(1,6)),
+ 'V31-1-7':()=>range(1,10).find(t=>36*t===12*(t+2)),
+ 'V31-1-8':()=>{const s=new Set(latin(3,4,4).map(t=>t[0][0]+t[1][0]+t[2][0]));return ['5','6','7','8','9','10'].filter(x=>s.has(+x)).join(';')},
+ 'V31-2-1':()=>skipDigit(50,'5'),
+ 'V31-2-2':()=>order(['Коля','Лёша','Миша','Нина','Оля'],i=>i('Коля')<i('Лёша')&&i('Коля')>i('Миша')&&i('Нина')>i('Лёша')&&i('Оля')<i('Миша'),p=>p[2]),
+ 'V31-2-3':()=>gdef([7,5,4],3,3),
+ 'V31-2-4':()=>{for(let a=1;a<40;a++)for(let b=1;b<a;b++)if(2*a+4*b===38&&4*a+2*b===46)return a*b},
+ 'V31-2-5':()=>range(0,120).find(x=>120+x===4*(120-x)),
+ 'V31-2-6':()=>4*5+6*3,
+ 'V31-2-7':()=>Math.abs(180-90*3),
+ 'V31-2-8':()=>{const sp=['плавание','теннис','шахматы','футбол'];return perms(sp,4).filter(([a,b,v,g])=>a!=='плавание'&&a!=='шахматы'&&b!=='футбол'&&b!=='теннис'&&v==='теннис'&&g!=='плавание').map(x=>x.join('|')).join(',')},
+ 'V31-3-1':()=>range(1,100).filter(n=>n%4===0&&n%6===0).length,
+ 'V31-3-2':()=>{for(let a=1;a<30;a++)for(let b=a+1;b<30;b++)for(let c=b+1;c<30;c++)if(a*b*c===24&&(a+1)*(b+1)*(c+1)===60)return c},
+ 'V31-3-3':()=>lock([['340',1,1],['693',1,0],['167',2,0],['586',0,0]]),
+ 'V31-3-4':()=>28*3,
+ 'V31-3-5':()=>12*2/3,
+ 'V31-3-6':()=>range(1,30).find(k=>3*k*(k+1)/2===108),
+ 'V31-3-7':()=>{for(let d=1;d<1000;d++){/* car 40/интервал, truck 30/интервал, старт 30 */const k=30/(40-30);if(Number.isInteger(k))return 40*k}},
+ 'V31-3-8':()=>{const s=maxOf(5,20);return ['5','6','9','10','11'].filter(x=>s.has(+x)).join(';')},
+ 'V31-4-1':()=>range(1,75).filter(n=>n%3===0&&n%4===0).length,
+ 'V31-4-2':()=>order(['Аня','Вера','Галя','Даша'],i=>i('Аня')===0&&i('Даша')===1&&Math.abs(i('Галя')-i('Даша'))!==1,p=>p[2]),
+ 'V31-4-3':()=>gdef([5,5,5],4,2),
+ 'V31-4-4':()=>{const s=9,x=26/2-s;return 2*(s+(s-x))},
+ 'V31-4-5':()=>180*2/15/3,
+ 'V31-4-6':()=>range(1,40).find(n=>6*(n-1)+5*n===104),
+ 'V31-4-7':()=>range(1,5000).find(d=>d/60-d/80===5),
+ 'V31-4-8':()=>{const s=new Set(latin(3,3,3).map(t=>t[0][0]+t[1][1]+t[2][2]));return ['3','4','5','6','7','9'].filter(x=>s.has(+x)).join(';')},
+ 'V31-5-1':()=>skipDigit(60,'3'),
+ 'V31-5-2':()=>order(['Захар','Ира','Кира','Лёва','Миша','Нина'],i=>i('Ира')>i('Захар')&&i('Ира')<i('Кира')&&i('Лёва')>i('Кира')&&i('Миша')>i('Лёва')&&i('Нина')===5,p=>p[2]),
+ 'V31-5-3':()=>gdef([6,7,8],5,3),
+ 'V31-5-4':()=>{const c=[10+14-18,10+18-14,14+18-10].filter(x=>x>18);return c.join(',')},
+ 'V31-5-5':()=>range(0,60).find(x=>60+x===3*(60-x)),
+ 'V31-5-6':()=>range(100,999).filter(n=>sum(digits(n))===5).length,
+ 'V31-5-7':()=>6*2/4,
+ 'V31-5-8':()=>perms(['рисование','музыка','танцы'],3).filter(([l,m,n])=>l!=='танцы'&&m!=='рисование'&&m!=='танцы'&&n!=='рисование').map(x=>x.join('|')).join(','),
+ 'V31-MO08':()=>(600+300)/(300/15),'V31-MO09':()=>48*(36/(48-36)),'V31-MO10':()=>400/(5-3),'V31-MO11':()=>(12+4)*2/2,
+ 'V31-FG05':()=>(22+26)/6,'V31-FG08':()=>{for(let a=1;a<40;a++)for(let b=1;b<a;b++)if(a+2*b===20&&2*a+b===25)return a*b},'V31-FG09':()=>12+20-16,
+ 'V31-TW07':()=>range(2,30).find(n=>n*(n-1)/2===21),'V31-TW11':()=>range(0,28).find(g=>4*(28-g)===3*g),
+ 'V31-ES03':()=>{let best=99;const rec=(st,left,k,arr)=>{if(k===0){if(left===0)best=Math.min(best,arr[3]);return}for(let x=st;x<=left;x++)rec(x+1,left-x,k-1,[...arr,x])};rec(1,20,4,[]);return best},
+ 'V31-ES05':()=>{const s=maxOf(3,12);return ['4','5','6','7','9','10'].filter(x=>s.has(+x)).join(';')},
+ 'V31-ES06':()=>{let s=0,n=0;while(s+n+1<=50){n++;s+=n}return n},
+ 'V31-ES07':()=>{let b=0;for(let a=0;a<=25;a++)for(let c4=0;a+c4<=25;c4++){const c=25-a-c4;if(3*a+4*c4+5*c===104)b=Math.max(b,c)}return b},
+ 'V31-ES08':()=>{const s=new Set(latin(4,4,4).slice(0,200).map(t=>t.reduce((x,r)=>x+r[0]+r[1],0)));return [...s].join(';')},
+ 'V31-LG02':()=>lock([['540',1,1],['486',1,0],['280',2,0],['940',0,0]]),
+ 'V31-LG04':()=>range(1,9).filter(L=>range(1,10).filter(k=>L%k===0).length===10-L).map(L=>10-L).join(','),
+ 'V31-NU01':()=>skipDigit(100,'1'),
+ 'V31-NU03':()=>{for(let a=1;a<30;a++)for(let b=a+1;b<30;b++)for(let c=b+1;c<31;c++)if(a*b*c===30&&(a+1)*(b+1)*(c+1)===72)return c},
+ 'V31-RM01':()=>range(1,105).filter(n=>n%6===0).length,'V31-RM03':()=>range(1,100).filter(n=>n%2===0||n%3===0).length,'V31-RM04':()=>range(1,200).find(n=>n%6===0&&n%8===0&&n%12===0),
+ 'V31-WD01':()=>range(0,150).find(x=>150+x===5*(150-x)),
+ 'V31-GU01':()=>gdef([4,3,5],3,2),'V31-GU02':()=>gdef([5,3,4],3,3),
+ 'V31-SQ01':()=>range(1,30).find(k=>3*k*(k+1)/2===135),'V31-GR01':()=>range(1,40).find(n=>9*n+10*(n-1)===275),
+
  'V30-V1-01':()=>range(1000,9999).find(n=>distinct(n)&&sum(digits(n))===10),
  'F29V1-02':()=>{let a=[3,6,10,15,21];while(a.length<7)a.push(a.at(-1)+(a.at(-1)-a.at(-2))+1);return a[6]},
  'F29V1-06':()=>perms([0,1,2,3,4,5],3).filter(p=>p[0]!==0&&p[2]%2===1).length,

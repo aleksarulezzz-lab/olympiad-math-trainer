@@ -18,6 +18,14 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   const ans=id=>page.evaluate(id=>V30.tasks.find(t=>t.id===id).answer,id);
   const ids=()=>page.evaluate(()=>{const a=window.getP().v30.active;return a?a.ids:[]});
   const wait=ms=>page.waitForTimeout(ms);
+  // ответ в задаче любого формата: число/текст, «выбери вариант», «выбери все», «сопоставь»
+  async function setAns(i,val){
+    const t=await page.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);return {type:t.type||'',rows:(t.rows||[]).length}},i);
+    if(t.type==='choice')return page.click(`[data-v30opt="${i}"][data-val="${val}"]`);
+    if(t.type==='multi'){for(const v of String(val).split(';'))await page.click(`[data-v30opt="${i}"][data-val="${v}"]`);return}
+    if(t.type==='match'){const parts=String(val).split('|');for(let k=0;k<parts.length;k++)await page.selectOption(`[data-v30match="${i}"][data-r="${k}"]`,parts[k]);return}
+    return page.fill('#v30a'+i,String(val));
+  }
 
   await page.goto(URL);await wait(700);
   console.log('1. Загрузка');
@@ -103,24 +111,24 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   await page.evaluate(()=>showHome('variants'));await wait(100);
   await page.click('#v30Variants [data-v30="variant"][data-n="3"][data-mode="olympiad"]');await wait(200);
   const v3=await ids();
-  ok(v3.length===10,'Вариант 3: 10 задач');
+  ok(v3.length===8,'Вариант 3: 8 задач, как на настоящей олимпиаде');
   ok(await page.evaluate(r=>JSON.stringify(r)===JSON.stringify(V30.variantTasks(3).map(t=>t.id)),v3),'открыт именно Вариант 3');
   ok(/^\d\d:\d\d$/.test(await page.textContent('#v30Timer')),'таймер идёт');
-  for(let i=0;i<5;i++)await page.fill('#v30a'+i,await ans(v3[i]));
-  await page.fill('#v30a5','неверно');await wait(400);
+  for(let i=0;i<5;i++)await setAns(i,await ans(v3[i]));
+  await page.fill('#v30a5','1000');await wait(400);
   await page.click('#v30Back');await wait(150);
   await page.reload();await wait(800);
   ok(await visible('#v30Variants .v30resume'),'после перезагрузки предлагается продолжить');
   await page.click('#v30Variants [data-v30="resume"]');await wait(200);
-  ok(await page.inputValue('#v30a4')===await ans(v3[4]),'ответы сохранились после перезагрузки');
+  ok(await page.inputValue('#v30a4')===String(await ans(v3[4])),'ответы сохранились после перезагрузки');
   ok(await page.evaluate(()=>!document.getElementById('v30a0').disabled),'ответы можно менять до завершения');
   dialogAnswer=true;await page.click('#v30Finish');await wait(250);
-  ok((await page.textContent('#v30Result .score')).trim()==='5 / 10','результат 5 / 10');
+  ok((await page.textContent('#v30Result .score')).trim()==='5 / 8','результат 5 / 8');
   const p1=await page.evaluate(()=>{const p=window.getP();return {ol:(p.olympiads||[]).length,best:p.v30.variants[3]&&p.v30.variants[3].best,active:p.v30.active}});
   ok(p1.ol===1&&p1.best===5&&!p1.active,'результат записан в историю, черновик удалён');
   await page.click('#v30Result [data-v30="nextVariant"]');await wait(200);
   const v4=await ids();
-  ok(v4.length===10&&v4.every(id=>!v3.includes(id)),'«Вариант 4 →» даёт 10 других задач');
+  ok(v4.length===8&&v4.every(id=>!v3.includes(id)),'«Вариант 4 →» даёт 8 других задач');
   await page.click('#v30Back');await wait(100);
   await page.click('#v30Variants [data-v30="discard"]');await wait(100);
   await page.click('#tabStats');await wait(200);
@@ -128,13 +136,13 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
 
   console.log('6. Все 5 вариантов различны, банк без дублей');
   const allV=await page.evaluate(()=>[1,2,3,4,5].map(n=>V30.variantTasks(n).map(t=>t.id)));
-  ok(new Set(allV.flat()).size===50,'50 разных задач в 5 вариантах');
+  ok(new Set(allV.flat()).size===40,'40 разных задач в 5 вариантах');
 
   console.log('7. Новый вариант, разминка, диагностика, кабинет родителя');
   await page.evaluate(()=>showHome('variants'));await wait(80);
   await page.click('#v30Variants [data-v30="fresh"][data-mode="practice"]');await wait(150);
   const fr=await ids();
-  ok(fr.length===10&&new Set(await page.evaluate(r=>r.map(id=>V30.tasks.find(t=>t.id===id).skill),fr)).size===10,'новый вариант: 10 задач по 10 разным навыкам');
+  ok(fr.length===8&&new Set(await page.evaluate(r=>r.map(id=>V30.tasks.find(t=>t.id===id).skill),fr)).size===8,'новый вариант: 8 задач по 8 разным навыкам');
   await page.click('#v30Back');await wait(80);await page.click('#v30Variants [data-v30="discard"]');await wait(80);
   await page.click('#tabWarm');await wait(80);await page.click('#v30Warm [data-v30="warm"]');await wait(150);
   ok((await ids()).length===5,'разминка: 5 задач');
@@ -147,10 +155,33 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   await page.click('#tabParent').catch(()=>{});await page.evaluate(()=>showHome('parent'));await wait(100);
   ok((await page.textContent('#parentDash')).includes('Гарантия'),'кабинет родителя заполнен');
 
+  console.log('7б. Новые форматы ответа: выбери вариант / выбери все / сопоставь');
+  await page.evaluate(()=>showHome('variants'));await wait(80);
+  await page.click('#v30Variants [data-v30="variant"][data-n="2"][data-mode="practice"]');await wait(150);
+  let v2=await ids();
+  await setAns(1,'Лёша');await page.click('#v30c1');await wait(30);
+  ok((await page.textContent('#v30f1')).includes('Пока неверно'),'неверный выбор варианта не засчитан');
+  ok(!(await page.$eval('[data-v30opt="1"]',b=>b.disabled)),'после ошибки можно выбрать другой вариант');
+  await setAns(1,await ans(v2[1]));await page.click('#v30c1');await wait(30);
+  ok((await page.textContent('#v30f1')).includes('Верно'),'«выбери вариант»: верный ответ засчитан');
+  await setAns(7,await ans(v2[7]));await page.click('#v30c7');await wait(30);
+  ok((await page.textContent('#v30f7')).includes('Верно'),'«сопоставь»: верный ответ засчитан');
+  await page.click('#v30Back');await wait(80);await page.click('#v30Variants [data-v30="discard"]');await wait(80);
+  await page.click('#v30Variants [data-v30="variant"][data-n="1"][data-mode="olympiad"]');await wait(150);
+  const v1=await ids();
+  await setAns(7,'6;7');await wait(300);
+  await page.click('#v30Back');await wait(100);await page.reload();await wait(700);
+  await page.click('#v30Variants [data-v30="resume"]');await wait(200);
+  ok(await page.$$eval('[data-v30opt="7"].sel',x=>x.length)===2,'«выбери все»: выбор сохранился после перезагрузки');
+  await setAns(7,'8;9');for(let i=0;i<7;i++)await setAns(i,await ans(v1[i]));
+  await page.click('#v30Finish');await wait(200);
+  ok((await page.textContent('#v30Result .score')).trim()==='8 / 8','олимпиада с новыми форматами: 8 / 8');
+  ok((await page.textContent('#v30Result')).includes('6, 7, 8, 9'),'ответ «выбери все» показан в разборе понятно');
+
   console.log('8. Проверка ответов');
   const chk=await page.evaluate(()=>{const f=id=>V30.tasks.find(t=>t.id===id);return [
     V30.isCorrect(f('F29V1-09'),'3'),!V30.isCorrect(f('F29V1-09'),'4'),V30.isCorrect(f('QH4'),'320 ягод'),
-    V30.isCorrect(f('V30-V5-04'),'за второй дверью'),V30.isCorrect(f('F29V1-08'),'Да, можно'),V30.isCorrect(f('F29V2-04'),'Математику'),
+    V30.isCorrect(f('V30-V5-04'),'за второй дверью'),V30.isCorrect(f('V31-1-8'),'9;8;7;6'),!V30.isCorrect(f('V31-1-8'),'6;7;8'),V30.isCorrect(f('V31-2-8'),'футбол|плавание|теннис|шахматы'),!V30.isCorrect(f('V31-2-8'),'плавание|футбол|теннис|шахматы'),V30.isCorrect(f('F29V1-08'),'Да, можно'),V30.isCorrect(f('F29V2-04'),'Математику'),
     V30.isCorrect(f('F29V4-10'),'нельзя'),!V30.isCorrect(f('F29V1-01'),'1207')]});
   ok(chk.every(Boolean),'нормализация ответов: '+JSON.stringify(chk));
 
