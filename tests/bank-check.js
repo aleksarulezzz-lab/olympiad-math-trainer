@@ -15,7 +15,7 @@ let bad=0,good=0;const fail=m=>{bad++;console.log('  ✗',m)};const pass=()=>goo
 const ids=new Set(),texts=new Set();
 for(const t of T){
   if(ids.has(t.id))fail('дубль id '+t.id);ids.add(t.id);
-  const x=t.text.replace(/\s+/g,' ').trim();if(texts.has(x))fail('дубль формулировки '+t.id);texts.add(x);
+  const x=t.text.replace(/\s+/g,' ').trim()+(t.fig?JSON.stringify(t.fig):'');if(texts.has(x))fail('дубль формулировки '+t.id);texts.add(x);
   if(!SK.find(s=>s.id===t.skill))fail('неизвестный навык '+t.id);
   if(![1,2,3].includes(t.lvl))fail('уровень '+t.id);
   for(const k of ['title','text','answer','idea','step','solution'])if(!String(t[k]||'').trim())fail(`пусто: ${k} у ${t.id}`);
@@ -24,7 +24,7 @@ for(const t of T){
   if(String(t.answer).length>1&&/^\d+$/.test(t.answer)&&new RegExp('(^|\\D)'+t.answer+'(\\D|$)').test(t.step))fail('подсказка выдаёт ответ: '+t.id);
   pass();
 }
-for(let n=1;n<=5;n++){const v=T.filter(t=>t.pool==='variant'&&t.id.startsWith('V31-'+n+'-'));if(v.length!==8||new Set(v.map(t=>t.skill)).size<7)fail('вариант '+n);else pass()}
+for(let n=1;n<=5;n++){const v=T.filter(t=>t.pool==='variant'&&(t.id.startsWith('V31-'+n+'-')||t.id.startsWith('V32-'+n+'-')));if(v.length!==8||new Set(v.map(t=>t.skill)).size<7)fail('вариант '+n);else pass()}
 if(T.filter(t=>t.pool==='variant').length!==40)fail('в вариантах должно быть 40 задач');
 for(const t of T){if(t.type==='choice'&&!t.options.includes(t.answer))fail('choice '+t.id);if(t.type==='multi'&&!t.answer.split(';').every(a=>t.options.includes(a)))fail('multi '+t.id);if(t.type==='match'&&(t.answer.split('|').length!==t.rows.length||!t.answer.split('|').every(a=>t.options.includes(a))))fail('match '+t.id)}
 if(T.filter(t=>t.pool==='diag').length!==10)fail('диагностика');
@@ -46,6 +46,24 @@ const latin=(rows,cols,vals)=>{const ps=perms(range(1,vals),cols);const out=[];c
 const gdef=(counts,d,m)=>{let best=0;const rec=(i,left,tot)=>{if(i===counts.length){best=Math.max(best,tot);return}for(let g=0;g<=Math.min(m-1,counts[i]);g++)for(let b=0;b<=Math.min(left,counts[i]-g);b++)rec(i+1,left-b,tot+g+b)};rec(0,d,0);return best+1};
 const order=(names,cons,ask)=>{const r=perms(names,names.length).filter(p=>cons(x=>p.indexOf(x)));return [...new Set(r.map(ask))].join(',')};
 const maxOf=(k,sumv)=>{const s=new Set();const rec=(st,left,kk,arr)=>{if(kk===0){if(left===0)s.add(arr[arr.length-1]);return}for(let x=st;x<=left;x++)rec(x+1,left-x,kk-1,[...arr,x])};rec(1,sumv,k,[]);return s};
+// --- задачи с рисунками: ответ пересчитывается по самому рисунку ---
+const cellsOf=map=>map.flatMap((row,r)=>[...row].map((ch,c)=>ch==='#'?[r,c]:null).filter(Boolean));
+const figSet=map=>new Set(cellsOf(map).map(x=>x.join(',')));
+const perimeter=map=>{const S=figSet(map);let e=0;for(const k of S){const [r,c]=k.split(',').map(Number);for(const [a,b] of [[r+1,c],[r-1,c],[r,c+1],[r,c-1]])if(!S.has(a+','+b))e++}return e};
+const squaresIn=map=>{const S=figSet(map),R=map.length,C=Math.max(...map.map(x=>x.length));let n=0;for(let k=1;k<=Math.min(R,C);k++)for(let r=0;r+k<=R;r++)for(let c=0;c+k<=C;c++){let ok=true;for(let i=0;i<k;i++)for(let j=0;j<k;j++)if(!S.has((r+i)+','+(c+j)))ok=false;if(ok)n++}return n};
+const dominoes=map=>{const S=figSet(map);let n=0;for(const k of S){const [r,c]=k.split(',').map(Number);if(S.has(r+','+(c+1)))n++;if(S.has((r+1)+','+c))n++}return n};
+const orient=cells=>{const res=new Map();let cur=cells;for(let f=0;f<2;f++){for(let q=0;q<4;q++){const mr=Math.min(...cur.map(x=>x[0])),mc=Math.min(...cur.map(x=>x[1]));const nn=cur.map(([r,c])=>[r-mr,c-mc]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);res.set(JSON.stringify(nn),nn);cur=cur.map(([r,c])=>[c,-r])}cur=cur.map(([r,c])=>[r,-c])}return [...res.values()]};
+const tiles=(map,piece)=>{const tgt=cellsOf(map),S=figSet(map),P=orient(cellsOf(piece));if(tgt.length%P[0].length)return false;const used=new Set();const rec=()=>{const f=tgt.find(x=>!used.has(x.join(',')));if(!f)return true;for(const v of P){const pl=v.map(([r,c])=>[r-v[0][0]+f[0],c-v[0][1]+f[1]].join(','));if(pl.every(k=>S.has(k)&&!used.has(k))){pl.forEach(k=>used.add(k));if(rec())return true;pl.forEach(k=>used.delete(k))}}return false};return rec()};
+for(const t of T.filter(t=>t.fig)){
+  const m=t.fig.map;let got;
+  if(/периметр/i.test(t.text)){const side=+t.text.match(/стороной (\d+) см/)[1];got=String(perimeter(m)*side)}
+  else if(/Сколько всего квадратов/.test(t.text))got=String(squaresIn(m));
+  else if(/прямоугольник 1×2/.test(t.text))got=String(dominoes(m));
+  else if(t.type==='multi'&&t.optFigs)got=t.optFigs.filter(o=>tiles(m,o.map)).map(o=>o.label).join(';');
+  else if(/вырезали белую фигуру/.test(t.text)){const area=+t.text.match(/равна (\d+)/)[1],n=+t.text.match(/из (\d+) одинаковых/)[1];const big=cellsOf(m.map(r=>r.replace(/o/g,'#'))).length,small=m.join('').split('o').length-1;if(big!==4*n||small!==n)fail('рисунок не соответствует условию '+t.id);got=String(3*area)}
+  else {fail('неизвестный тип рисунка '+t.id);continue}
+  if(got!==t.answer)fail(`${t.id}: в банке «${t.answer}», по рисунку «${got}»`);else pass();
+}
 const check={
  'V31-1-1':()=>range(1,100).filter(n=>n%2===0&&n%5===0).length,
  'V31-1-2':()=>order(['Артём','Борис','Вера','Глеб','Дина'],i=>i('Вера')>i('Глеб')&&i('Борис')<i('Артём')&&i('Борис')<i('Дина')&&i('Борис')!==0,p=>p[0]),

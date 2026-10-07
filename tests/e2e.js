@@ -19,6 +19,17 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   const ids=()=>page.evaluate(()=>{const a=window.getP().v30.active;return a?a.ids:[]});
   const wait=ms=>page.waitForTimeout(ms);
   // ответ в задаче любого формата: число/текст, «выбери вариант», «выбери все», «сопоставь»
+  // две неверные попытки в задаче любого формата
+  async function wrongTwice(i){
+    const t=await page.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);return {type:t.type||'',answer:t.answer,options:t.options||[]}},i);
+    if(t.type==='choice'||t.type==='multi'){
+      const wrong=t.options.filter(o=>o!==t.answer).slice(0,2);
+      await page.click(`[data-v30opt="${i}"][data-val="${wrong[0]}"]`);await page.click('#v30c'+i);
+      if(t.type==='multi')await page.click(`[data-v30opt="${i}"][data-val="${wrong[0]}"]`);
+      await page.click(`[data-v30opt="${i}"][data-val="${wrong[1]}"]`);await page.click('#v30c'+i);return;
+    }
+    await page.fill('#v30a'+i,'0x');await page.click('#v30c'+i);await page.fill('#v30a'+i,'0y');await page.click('#v30c'+i);
+  }
   async function setAns(i,val){
     const t=await page.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);return {type:t.type||'',rows:(t.rows||[]).length}},i);
     if(t.type==='choice')return page.click(`[data-v30opt="${i}"][data-val="${val}"]`);
@@ -94,16 +105,16 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
 
   console.log('4. Тема никогда не «не запускается»: свежие задачи заканчиваются → повтор задач с ошибками');
   let starts=0,reviews=0;
-  for(let k=0;k<6;k++){
+  for(let k=0;k<10;k++){
     await page.evaluate(()=>showHome('topics'));await wait(80);
     await page.click('#v30Topics [data-v30="topic"][data-skill="grid"]');await wait(120);
     const r=await ids();if(r.length)starts++;
     reviews+=await page.$$eval('#v30Tasks .v30rev',x=>x.length);
     // отвечаем неверно и открываем разбор во всех задачах
-    for(let i=0;i<r.length;i++){await page.fill('#v30a'+i,'0x');await page.click('#v30c'+i);await page.fill('#v30a'+i,'0y');await page.click('#v30c'+i);await page.click('#v30s'+i)}
+    for(let i=0;i<r.length;i++){await wrongTwice(i);await page.click('#v30s'+i)}
     await page.click('#v30Finish');await wait(100);
   }
-  ok(starts===6,'тема запустилась 6 раз подряд из 6');
+  ok(starts===10,'тема запустилась 10 раз подряд из 10');
   ok(reviews>0,'когда свежие задачи кончились, выданы задачи с ошибками (с пометкой «повтор»)');
   ok(dialogs.every(m=>!m.includes('мало')),'не было отказов «свежих задач мало»');
 
