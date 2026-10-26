@@ -1,7 +1,7 @@
 /* Сквозная браузерная проверка тренажёра (Playwright + Chromium).
    Запуск:  node tests/e2e.js
    Нужен пакет playwright (npm i -D playwright) или глобальная установка. */
-const path=require('path');
+const path=require('path');const fs=require('fs');
 let chromium;
 try{({chromium}=require('playwright'))}catch(e){({chromium}=require(require('child_process').execSync('npm root -g').toString().trim()+'/playwright'))}
 const URL='file://'+path.resolve(__dirname,'..','index.html');
@@ -221,6 +221,13 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok(await t2.evaluate(()=>getP().xp===777),'в новой вкладке прогресс гостя на месте');
   ok((await t2.textContent('.hero .privacyLine')).includes('Без регистрации'),'на главном экране есть строка о приватности');
   await ctx.close();
+
+  console.log('10б. Установка на телефон и превью ссылки');
+  await page.evaluate(()=>showHome('guide'));await wait(150);
+  ok(await visible('#v30InstallCard'),'в «Как пользоваться» есть инструкция по установке');
+  ok(await page.evaluate(()=>!!document.querySelector('link[rel=manifest]')&&!!document.querySelector('meta[property="og:image"]')),'есть манифест и картинка превью');
+  const man=JSON.parse(fs.readFileSync(path.resolve(__dirname,'..','manifest.webmanifest'),'utf8'));
+  ok(man.icons.every(i=>fs.existsSync(path.resolve(__dirname,'..',i.src)))&&fs.existsSync(path.resolve(__dirname,'..','og.png')),'иконки и картинка превью на месте');
 
   console.log('11. Остальные кнопки: мир, магазин, мастерская, приватность, админ');
   await page.setViewportSize({width:1100,height:900});
