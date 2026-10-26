@@ -210,6 +210,17 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok(m.seen,'задачи, увиденные в старой версии, не выдаются как новые');
   ok(m.act==='Старая олимпиада'&&!m.old,'незавершённая работа старой версии перенесена');
   ok(e2.length===0,'нет JS-ошибок в сценарии миграции');
+  ok(await p2.evaluate(()=>!sessionStorage.getItem('ol5guestSessionProgressV27')&&!!localStorage.getItem('ol5guestSessionProgressV27')),'старый гостевой прогресс перенесён из вкладки в браузер');
+
+  console.log('10a. Прогресс гостя не пропадает после закрытия вкладки');
+  const ctx=await browser.newContext();const t1=await ctx.newPage();
+  await t1.goto(URL);await t1.waitForTimeout(400);
+  await t1.evaluate(()=>{const x=getP();x.xp=777;setP(x)});
+  ok(await t1.evaluate(()=>!!localStorage.getItem('ol5guestSessionProgressV27')),'гостевой прогресс пишется в localStorage');
+  await t1.close();const t2=await ctx.newPage();await t2.goto(URL);await t2.waitForTimeout(400);
+  ok(await t2.evaluate(()=>getP().xp===777),'в новой вкладке прогресс гостя на месте');
+  ok((await t2.textContent('.hero .privacyLine')).includes('Без регистрации'),'на главном экране есть строка о приватности');
+  await ctx.close();
 
   console.log('11. Остальные кнопки: мир, магазин, мастерская, приватность, админ');
   await page.setViewportSize({width:1100,height:900});
