@@ -60,7 +60,7 @@
 
 <div class="wrap">
 <section id="home">
-<div class="hero"><h1>Олимпиадный тренажёр · 5 класс</h1><p>Не просто решаем задачи — учимся находить идею, разбирать ошибки и видеть прогресс.</p><p class="privacyLine">🔒 Без регистрации. Прогресс хранится только на этом устройстве. Тренажёр не собирает и никуда не отправляет ваши данные.</p></div><div class="accountbar"><div id="accountWho"><span class="role-pill">Гость</span> Войдите, чтобы сохранять свой прогресс</div><div class="account-actions"><button class="account-btn primary" onclick="showAccount()">👤 Учетная запись</button><button class="account-btn" onclick="showAccount('sync')">🔄 Перенести прогресс</button></div></div>
+<div class="hero"><h1>Олимпиадный тренажёр · 5 класс</h1><p>Не просто решаем задачи — учимся находить идею, разбирать ошибки и видеть прогресс.</p><p class="privacyLine">🔒 Без регистрации. Прогресс хранится только на этом устройстве. Тренажёр не собирает персональные данные: считаем только общее число заходов и решённых задач, без cookies, IP-адресов и идентификаторов.</p></div><div class="accountbar"><div id="accountWho"><span class="role-pill">Гость</span> Войдите, чтобы сохранять свой прогресс</div><div class="account-actions"><button class="account-btn primary" onclick="showAccount()">👤 Учетная запись</button><button class="account-btn" onclick="showAccount('sync')">🔄 Перенести прогресс</button></div></div>
 <div id="accountPanel" class="account-panel hidden"></div><div class="tabs"><button class="tab active" id="tabVariants" onclick="showHome('variants')">Варианты</button><button class="tab" id="tabTopics" onclick="showHome('topics')">Тренировка по темам</button><button class="tab" id="tabWarm" onclick="showHome('warm')">5 минут разминки</button><button class="tab" id="tabStats" onclick="showHome('stats')">Мой прогресс</button><button class="tab" id="tabAdaptive" onclick="showHome('adaptive')">🤖 Мой тренер</button><button class="tab" id="tabGuide" onclick="showHome('guide')">📘 Как пользоваться</button><button class="tab" id="tabParent" onclick="showHome('parent')">👨‍👩‍👧 Родителю</button><button class="tab" id="tabRating" onclick="showHome('rating')">🏆 Рейтинг</button><button class="tab" id="tabWorld" onclick="showHome('world')">🗺️ Мир задач</button></div>
 <div id="homeVariants"><div id="nextStepTop"></div><div class="grid"><button class="variant" onclick="pick(0)">Вариант 1<small>10 свежих задач · 45 минут</small></button><button class="variant" onclick="pick(1)">Вариант 2<small>10 свежих задач · 45 минут</small></button><button class="variant" onclick="pick(2)">Вариант 3<small>10 свежих задач · 45 минут</small></button><button class="variant" onclick="pick(3)">Вариант 4<small>10 свежих задач · 45 минут</small></button><button class="variant" onclick="pick(4)">Вариант 5<small>10 свежих задач · 45 минут</small></button></div><div id="modebox" class="modebox hidden"><h2 id="picked"></h2><div class="modegrid"><button class="mode" onclick="start('olympiad')"><strong>🏆 Олимпиада</strong><span>45 минут · ответы проверяются после завершения.</span></button><button class="mode" onclick="start('training')"><strong>🧠 Тренировка</strong><span>Подсказки, мгновенная проверка и разбор.</span></button></div></div></div>
 <div id="homeTopics" class="hidden"><div class="topicgrid" id="topics"></div></div>
@@ -121,7 +121,7 @@ function daysSinceActivity(p){let d=p.daily||{},dt=new Date();for(let i=0;i<60;i
 function renderGame(){let p=getP(),t=todayData(),g=gameInfo(p),pct=Math.min(100,g.into),gap=daysSinceActivity(p);let never=gap===null,energy=never?100:gap===0?100:gap===1?75:gap===2?50:gap===3?40:25;let energyText=never?'Герой готов к первой тренировке!':gap===0?'Энергия полная — отличный день!':gap===1?'Вчера отдыхал — немного восстановился.':`Паутина подсохла после ${gap} дней без тренировки.`;let mood=t.attempts?'🕷️':'🕸️';$('game').innerHTML=`<div class="gameCard"><div class="gameTop"><div class="heroAvatar">${mood}</div><div><h3>Человек-паук: ${g.name}</h3><div>Уровень ${g.level} · ${g.xp} XP</div><div class="gameMuted">${t.attempts?'Сегодня паутина заряжается!':'Сегодня герой ещё не вышел на тренировку.'}</div></div></div><div class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div><div class="gameMuted">До следующего уровня: ${100-g.into} XP</div><div class="gameStats"><div class="gameStat"><b>${g.streak}</b>дней серия</div><div class="gameStat"><b>${Math.round(energy)}%</b>энергия</div><div class="gameStat"><b>${formatDuration(t.seconds)}</b>сегодня</div><div class="gameStat"><b>${t.correct}/${t.attempts}</b>верных</div></div><div class="gameMuted energy">${energyText}</div></div><h3 class="dailyTitle">📅 Сегодня</h3><div class="todayGrid"><div class="todayCard"><b>${formatDuration(t.seconds)}</b>занятий</div><div class="todayCard"><b>${t.attempts}</b>проверок</div><div class="todayCard"><b>${t.attempts?Math.round(t.correct/t.attempts*100):0}%</b>точность</div><div class="todayCard"><b>+${t.xp||0} XP</b>заработано</div></div>`}
 
 function skillKey(t){return `${t.topic}::${t.title}`}
-function record(t,ok,usedHint=0){let p=getP();p.total=(p.total||0)+1;p.correct=(p.correct||0)+(ok?1:0);p.hints=(p.hints||0)+usedHint;p.byTopic=p.byTopic||{};p.byTopic[t.topic]=p.byTopic[t.topic]||{attempts:0,correct:0,hints:0};p.byTopic[t.topic].attempts++;p.byTopic[t.topic].correct+=ok?1:0;p.byTopic[t.topic].hints+=usedHint;p.errors=p.errors||{};if(!ok)p.errors[t.topic]=(p.errors[t.topic]||0)+1;p.history=p.history||[];p.history.push({ts:Date.now(),topic:t.topic,title:t.title,ok:!!ok,usedHint:usedHint||0});if(p.history.length>300)p.history=p.history.slice(-300);p.taskStats=p.taskStats||{};let sk=skillKey(t),ts=p.taskStats[sk]||{attempts:0,correct:0,errors:0,last:0};ts.attempts++;ts.correct+=ok?1:0;ts.errors+=ok?0:1;ts.last=Date.now();p.taskStats[sk]=ts;addDaily(p,ok,usedHint);setP(p)}
+function record(t,ok,usedHint=0){if(ok&&window.statSolved)statSolved();let p=getP();p.total=(p.total||0)+1;p.correct=(p.correct||0)+(ok?1:0);p.hints=(p.hints||0)+usedHint;p.byTopic=p.byTopic||{};p.byTopic[t.topic]=p.byTopic[t.topic]||{attempts:0,correct:0,hints:0};p.byTopic[t.topic].attempts++;p.byTopic[t.topic].correct+=ok?1:0;p.byTopic[t.topic].hints+=usedHint;p.errors=p.errors||{};if(!ok)p.errors[t.topic]=(p.errors[t.topic]||0)+1;p.history=p.history||[];p.history.push({ts:Date.now(),topic:t.topic,title:t.title,ok:!!ok,usedHint:usedHint||0});if(p.history.length>300)p.history=p.history.slice(-300);p.taskStats=p.taskStats||{};let sk=skillKey(t),ts=p.taskStats[sk]||{attempts:0,correct:0,errors:0,last:0};ts.attempts++;ts.correct+=ok?1:0;ts.errors+=ok?0:1;ts.last=Date.now();p.taskStats[sk]=ts;addDaily(p,ok,usedHint);setP(p)}
 
 function renderNextStep(){
   const el=$('nextStepTop');if(!el)return;const p=getP(),d=todayData(p),w=getWeakTopic(),last=p.lastVariant;
@@ -3612,6 +3612,24 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__installPrompt=e;btns(true)});
   addEventListener('appinstalled',()=>{window.__installPrompt=null;btns(false)});
   window.installApp=function(){const e=window.__installPrompt;if(!e)return;e.prompt();e.userChoice.finally(()=>{window.__installPrompt=null;btns(false)})};
+})();
+</script>
+<script>
+/* Анонимный счётчик для вечернего отчёта: «открыли», «первое открытие за день на устройстве»
+   и сколько задач решено верно. Без cookies, IP и идентификаторов — на сервер уходят только эти числа.
+   Флажок «сегодня уже посчитан» лежит в localStorage и никуда не отправляется. Только на сайте. */
+(function(){
+  if(location.hostname!=='aleksarulezzz.ru') return;
+  const URL='https://lashmaker-booking.alekssandra86.workers.dev/api/hit', SITE='math', KEY='statsDay';
+  const send=o=>{try{navigator.sendBeacon(URL,new Blob([JSON.stringify({site:SITE,...o})],{type:'text/plain'}))}catch(e){}};
+  const day=new Date(Date.now()+3*3600e3).toISOString().slice(0,10); // день по Москве, как в отчёте
+  let first=false; try{ first=localStorage.getItem(KEY)!==day; localStorage.setItem(KEY,day); }catch(e){}
+  send({open:1,device:first?1:0});
+  let solved=0;
+  window.statSolved=()=>{solved++};
+  const flush=()=>{if(solved){send({solved});solved=0}};
+  addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
+  addEventListener('pagehide',flush);
 })();
 </script>
 </body>
