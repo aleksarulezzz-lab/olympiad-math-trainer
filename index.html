@@ -3601,8 +3601,11 @@ function totalsHtml(p){
 }
 function renderStatsV30(){
   const el=$('v30Stats');if(!el)return;const p=P();
-  el.innerHTML=todayReportHtml(p)+totalsHtml(p)+`<div class="modebox"><h2>🗺️ Навыки (по последним решениям)</h2>${skillMapHtml()}<p class="v30muted small">Процент — доля задач, решённых самостоятельно, среди последних 8 задач навыка.</p></div>`;
+  const g=$('game');if(g&&el.contains(g))($('homeStats')||document.body).appendChild(g); // иначе перерисовка удалит блок героя
+  el.innerHTML=todayReportHtml(p)+'<div class="modebox" id="v30Hero"></div>'+totalsHtml(p)+`<div class="modebox"><h2>🗺️ Навыки (по последним решениям)</h2>${skillMapHtml()}<p class="v30muted small">Процент — доля задач, решённых самостоятельно, среди последних 8 задач навыка.</p></div>`;
   bindActions(el);
+  // герой и XP живут в старом блоке #game (прежняя вкладка «Мой прогресс» скрыта) — переносим его сюда
+  if(g){$('v30Hero').appendChild(g);try{window.renderGame()}catch(e){}}
 }
 
 /* ---------- дополнения к экранам старых слоёв ---------- */
