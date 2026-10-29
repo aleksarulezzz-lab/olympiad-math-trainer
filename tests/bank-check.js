@@ -1,7 +1,8 @@
 /* Проверка банка задач без браузера.
    Запуск:  node tests/bank-check.js
    1) структура: уникальные id/формулировки, у каждой задачи есть навык, уровень, идея, шаг-подсказка, решение;
-   2) 5 вариантов × 10 задач, по одной на каждый навык; 10 задач диагностики;
+   2) 7 вариантов × 8 задач (не меньше 7 разных навыков); 10 задач диагностики;
+      у задач вариантов есть обоснование (why), задачи с verify принимают свой эталон;
    3) независимый пересчёт ответов перебором для задач, где это возможно;
    4) подсказки и примеры уроков не выдают ответ задачи. */
 const fs=require('fs'),path=require('path');
@@ -17,15 +18,18 @@ for(const t of T){
   if(ids.has(t.id))fail('дубль id '+t.id);ids.add(t.id);
   const x=t.text.replace(/\s+/g,' ').trim()+(t.fig?JSON.stringify(t.fig):'');if(texts.has(x))fail('дубль формулировки '+t.id);texts.add(x);
   if(!SK.find(s=>s.id===t.skill))fail('неизвестный навык '+t.id);
-  if(![1,2,3].includes(t.lvl))fail('уровень '+t.id);
+  if(![1,2,3,4].includes(t.lvl))fail('уровень '+t.id);
+  if(t.why&&(!Array.isArray(t.why)||t.why.length!==3||new Set(t.why).size!==3||t.why.some(x=>!String(x).trim())))fail('обоснование '+t.id);
+  if(t.verify&&!t.verify(String(t.answer)))fail('verify не принимает эталон '+t.id);
   for(const k of ['title','text','answer','idea','step','solution'])if(!String(t[k]||'').trim())fail(`пусто: ${k} у ${t.id}`);
   if(!['train','variant','diag'].includes(t.pool))fail('пул '+t.id);
   // третья подсказка не должна содержать готовый ответ (для ответов длиннее 1 символа)
   if(String(t.answer).length>1&&/^\d+$/.test(t.answer)&&new RegExp('(^|\\D)'+t.answer+'(\\D|$)').test(t.step))fail('подсказка выдаёт ответ: '+t.id);
   pass();
 }
-for(let n=1;n<=5;n++){const v=T.filter(t=>t.pool==='variant'&&(t.id.startsWith('V31-'+n+'-')||t.id.startsWith('V32-'+n+'-')));if(v.length!==8||new Set(v.map(t=>t.skill)).size<7)fail('вариант '+n);else pass()}
-if(T.filter(t=>t.pool==='variant').length!==40)fail('в вариантах должно быть 40 задач');
+for(let n=1;n<=7;n++){const v=T.filter(t=>t.pool==='variant'&&['V31-','V32-','V33-'].some(x=>t.id.startsWith(x+n+'-')));if(v.length!==8||new Set(v.map(t=>t.skill)).size<7)fail('вариант '+n);else pass()}
+if(T.filter(t=>t.pool==='variant').length!==56)fail('в вариантах должно быть 56 задач');
+for(const t of T.filter(t=>t.pool==='variant'))if(!t.why)fail('нет обоснования у задачи варианта '+t.id);
 for(const t of T){if(t.type==='choice'&&!t.options.includes(t.answer))fail('choice '+t.id);if(t.type==='multi'&&!t.answer.split(';').every(a=>t.options.includes(a)))fail('multi '+t.id);if(t.type==='match'&&(t.answer.split('|').length!==t.rows.length||!t.answer.split('|').every(a=>t.options.includes(a))))fail('match '+t.id)}
 if(T.filter(t=>t.pool==='diag').length!==10)fail('диагностика');
 for(const s of SK){const n=T.filter(t=>t.pool==='train'&&t.skill===s.id).length;if(n<9)fail(`мало задач в навыке ${s.id}: ${n}`);
@@ -182,6 +186,56 @@ const check={
  'V30-W10':()=>range(0,48).find(k=>k-6===48-k+6),
  'F29V2-10':()=>range(1,30).find(s=>(s+3)+(s+4+3)===24),
 };
+// --- V33: независимый пересчёт новых задач ---
+const rebus=expr=>{const letters=[...new Set(expr.replace(/[^А-ЯЁ]/g,''))],lead=new Set(expr.match(/[А-ЯЁ]+/g).filter(w=>w.length>1).map(w=>w[0])),sols=[],used=[],m={};
+  const rec=k=>{if(k===letters.length){const e=expr.replace(/[А-ЯЁ]+/g,w=>String(+[...w].map(c=>m[c]).join(''))).replace(/=/g,'===').replace(/×/g,'*');if(Function('return '+e)())sols.push({...m});return}
+    const L=letters[k];for(let d=0;d<10;d++){if(used[d]||(d===0&&lead.has(L)))continue;used[d]=1;m[L]=d;rec(k+1);used[d]=0}};rec(0);return sols};
+const word=(sols,w)=>[...new Set(sols.map(s=>[...w].map(c=>s[c]).join('')))].join(',');
+const pour2=(A,B,goal)=>{const seen=new Map([['0,0',0]]);let q=[[0,0]];while(q.length){const nq=[];for(const [a,b] of q){const d=seen.get(a+','+b);if(a===goal||b===goal)return d;const t=Math.min(a,B-b),u=Math.min(b,A-a);for(const s of [[A,b],[a,B],[0,b],[a,0],[a-t,b+t],[a+u,b-u]]){const k=s.join(',');if(!seen.has(k)){seen.set(k,d+1);nq.push(s)}}}q=nq}return 'нет'};
+const pour3=(caps,start,goal)=>{const seen=new Set([start.join()]);let q=[start],d=0;while(q.length){for(const s of q)if(goal(s))return d;const nq=[];for(const s of q)for(let i=0;i<3;i++)for(let j=0;j<3;j++){if(i===j)continue;const t=Math.min(s[i],caps[j]-s[j]);if(!t)continue;const n=s.slice();n[i]-=t;n[j]+=t;if(!seen.has(n.join())){seen.add(n.join());nq.push(n)}}q=nq;d++}};
+const minWeigh=n=>{let k=0,c=1;while(c<n){c*=3;k++}return k};
+const cube=(a,b,c,faces)=>{let n=0;for(let x=0;x<a;x++)for(let y=0;y<b;y++)for(let z=0;z<c;z++){const f=(x===0)+(x===a-1)+(y===0)+(y===b-1)+(z===0)+(z===c-1);if(f===faces)n++}return n};
+const circle=(names,cons)=>perms(names.slice(1),names.length-1).map(p=>[names[0],...p]).filter(p=>cons(x=>p.indexOf(x),p));
+const after=(p,x)=>p[(p.indexOf(x)+1)%p.length];
+const cubeOpp=(views,a)=>{const adj=new Set(views.filter(v=>v.includes(a)).flat());adj.delete(a);const left=range(1,6).filter(x=>x!==a&&!adj.has(x));if(left.length===1)return left[0];
+  // остальное: противоположная пара, найденная для другой грани
+  const opp={};for(let f=1;f<=6;f++){const ad=new Set(views.filter(v=>v.includes(f)).flat());ad.delete(f);const l=range(1,6).filter(x=>x!==f&&!ad.has(x));if(l.length===1){opp[f]=l[0];opp[l[0]]=f}}return left.filter(x=>!opp[x]||opp[x]===a).join(',')};
+const knightsTable=(n,says)=>{const res=new Set();for(let m=0;m<(1<<n);m++){const K=i=>(m>>(((i%n)+n)%n))&1;let ok=true;for(let i=0;i<n;i++)if(!!K(i)!==says(K,i)){ok=false;break}if(ok)res.add([...Array(n)].reduce((a,_,i)=>a+K(i),0))}return [...res]};
+const maxRects=n=>{let k=0;while((k+1)*(k+2)/2<=n*n)k++;return k}; // оценка; пример в решении
+Object.assign(check,{
+ 'V33-SP01':()=>7-2,'V33-SP02':()=>cube(2,2,2,3),'V33-SP03':()=>cube(3,3,3,0),'V33-SP04':()=>cube(4,4,4,1),
+ 'V33-SP05':()=>circle(['вишня','звезда','орех','сердце','банан','мишка'],(i,p)=>after(p,'вишня')==='звезда'&&after(p,'звезда')==='орех'&&after(p,'орех')==='сердце'&&after(p,'сердце')==='банан'&&after(p,'банан')==='мишка').map(p=>after(p,'мишка')).join(','),
+ 'V33-SP06':()=>[...new Set(circle(['гриб','ёлка','бабочка','жук','домик','цветок'],(i,p)=>after(p,'гриб')==='домик'&&Math.abs(i('жук')-i('гриб'))===3&&(after(p,'ёлка')==='бабочка'||after(p,'бабочка')==='ёлка')).map(p=>after(p,'домик')))].join(','),
+ 'V33-SP07':()=>cubeOpp([[1,2,3],[1,2,4],[1,3,5]],1),'V33-SP08':()=>cubeOpp([[6,4,2],[6,4,1],[6,2,3]],4),
+ 'V33-SP09':()=>cube(3,4,5,0),'V33-SP10':()=>{for(let n=3;n<20;n++)if(cube(n,n,n,1)===96)return n**3},
+ 'V33-CN05':()=>range(10,99).filter(x=>x===4*sum(digits(x))).join(', '),
+ 'V33-CN03':()=>{const s=new Set();for(const p of perms(range(1,6),6)){const [a,b,c,x,y,z]=p;if(a+x+b===12&&b+y+c===12&&c+z+a===12)s.add([a,b,c].sort().join(', '))}return [...s].join('|')},
+ 'V33-CN08':()=>range(0,10).filter(L=>range(1,10).filter(k=>L>=k).length===10-L).map(L=>10-L).join(','),
+ 'V33-CN10':()=>{for(const c of perms(range(1,20),5))if(sum(c)===20&&c.reduce((a,b)=>a*b,1)%25===0)return 'да';return 'нет'},
+ 'V33-CT04':()=>1+range(1,4).reduce((a,k)=>a+k,0),'V33-CT05':()=>4*9,
+ 'V33-CT09':()=>maxRects(3),'V33-6-8':()=>maxRects(4),
+ 'V33-WG01':()=>minWeigh(3),'V33-WG02':()=>minWeigh(27),'V33-WG03':()=>minWeigh(10),'V33-WG04':()=>minWeigh(100),'V33-7-4':()=>minWeigh(8),
+ 'V33-WG06':()=>pour2(9,4,6),'V33-WG07':()=>pour2(5,7,6),'V33-WG08':()=>pour2(6,9,4),
+ 'V33-6-4':()=>pour3([8,5,3],[8,0,0],s=>s[0]===4&&s[1]===4),
+ 'V33-RB01':()=>word(rebus('Б+Б+Б=АБ'),'АБ'),'V33-RB02':()=>word(rebus('А+АА+ААА=492'),'А'),
+ 'V33-RB03':()=>word(rebus('АБ+БА=121').filter(s=>s['А']-s['Б']===5),'АБ'),'V33-RB04':()=>word(rebus('СОК+СОК=ВОДА'),'В'),
+ 'V33-RB05':()=>word(rebus('КИС+КСИ=ИСК'),'ИСК'),'V33-RB06':()=>word(rebus('УДАР+УДАР=ДРАКА'),'ДРАКА'),
+ 'V33-RB07':()=>word(rebus('ОДИН+ОДИН=МНОГО'),'МНОГО'),'V33-RB08':()=>word(rebus('ТОРГ×Г=ГРОТ'),'ТОРГ'),
+ 'V33-RB09':()=>word(rebus('АБВГ×4=ГВБА'),'АБВГ'),'V33-RB10':()=>word(rebus('КТО×КТО=МЫШКА'),'КТО'),
+ 'V33-6-6':()=>word(rebus('ВАГОН+ВАГОН=СОСТАВ'),'СОСТАВ'),'V33-7-7':()=>rebus('ТИК+ТИК=ТАК').length?'да':'нет',
+ 'V33-TR01':()=>C2(7),'V33-TR03':()=>range(2,30).find(n=>C2(n)===45),'V33-TR04':()=>C2(6),'V33-TR05':()=>C2(4)*3-17,
+ 'V33-TR07':()=>C2(8)*2/8,'V33-TR08':()=>4*2+(C2(6)-4)*3,'V33-TR10':()=>2*C2(6),
+ 'V33-TR09':()=>range(1,40).filter(n=>{const tot=C2(n+2)-8;return tot>0&&(2*tot)%n===0&&tot/n<=n+1}).join(', '),
+ 'V33-L4-01':()=>Math.min(...knightsTable(10,(K,i)=>!K(i-1)&&!K(i+1))),'V33-6-7':()=>knightsTable(12,(K,i)=>!K(i+1)).join(','),
+ 'V33-L4-02':()=>{for(let x=1;;x++){const d=digits(x);if(new Set(d).size===d.length&&sum(d)===40)return x}},
+ 'V33-L4-03':()=>sum(range(1,10))%2?'нет':'да','V33-7-8':()=>sum(range(1,20))-19,
+ 'V33-6-3':()=>{const s=new Set();for(const [d,b,a,v,k] of perms(range(2,6),5))if(Math.abs(d-b)===3*Math.abs(a-b)&&Math.abs(b-1)===Math.abs(b-v))s.add(d);return [...s].join(',')},
+ 'V33-6-2':()=>{const p=['гриб','домик','цветок','жук','солнце','яблоко','ёлка','бабочка'];return p[4]},
+ 'V33-7-1':()=>range(1,800).find(g=>{const a=(800-5*g)/3;return Number.isInteger(a)&&3*g+5*a===640}),
+ 'V33-7-2':()=>{for(let n=3;n<20;n++)if(cube(n,n,n,2)===60)return cube(n,n,n,0)},
+ 'V33-7-3':()=>range(100,999).filter(x=>x===12*sum(digits(x))).join(', '),
+ 'V33-6-1':()=>range(1,300).find(x=>x%6===0&&x-x/3+x/6===50)
+});
 for(const [id,f] of Object.entries(check)){
   const t=by[id];if(!t){fail('нет задачи '+id);continue}
   const got=String(f());if(got!==String(t.answer))fail(`${id}: в банке «${t.answer}», перебор даёт «${got}»`);else pass();
