@@ -1,6 +1,6 @@
 {
   "name": "olympiad-math-trainer",
-  "version": "33.0.0",
+  "version": "34.0.0",
   "private": true,
   "description": "Олимпиадный тренажёр по математике для 5 класса (один HTML-файл)",
   "scripts": {

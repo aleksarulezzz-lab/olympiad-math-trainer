@@ -318,6 +318,99 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
     await pg.close();
   }
 
+  console.log('13. Две ветки: олимпиада и «Школа на шаг вперёд»');
+  {
+    const pg=await browser.newPage({viewport:{width:1100,height:900}});pg.on('pageerror',e=>errors.push(e.message));pg.on('dialog',d=>d.accept());
+    const vis=sel=>pg.evaluate(s=>{const e=document.querySelector(s);return !!e&&!e.closest('.hidden')&&e.offsetParent!==null},sel);
+    const pids=()=>pg.evaluate(()=>{const a=window.getP().v30.active;return a?a.ids:[]});
+    await pg.goto(URL);await pg.waitForTimeout(500);
+    ok(await vis('#v30TrackPick'),'при первом входе предлагается выбрать ветку');
+    ok((await pg.textContent('#tabVariants')).includes('Варианты'),'по умолчанию — олимпиадная ветка');
+    await pg.click('#v30TrackPick [data-track="school"]');await pg.waitForTimeout(150);
+    ok(await pg.evaluate(()=>V30.track())==='school'&&!(await vis('#v30TrackPick')),'выбрана школьная ветка, выбор больше не мешает');
+    ok((await pg.textContent('#tabVariants')).includes('Контрольные'),'вкладка «Варианты» стала «Контрольные»');
+    ok(await pg.$$eval('#v30Variants .v30skill',x=>x.length)===10,'в школьной ветке 10 тем (5 и 6 класс)');
+    await pg.evaluate(()=>showHome('adaptive'));await pg.waitForTimeout(100);
+    const sk=await pg.$$eval('#v30Trainer .v30skill [data-v30="trainer"]',x=>x.map(b=>b.dataset.skill));
+    ok(sk.length===10&&sk.every(x=>x.startsWith('s_')),'тренер показывает только школьные темы');
+    await pg.evaluate(()=>showHome('variants'));await pg.waitForTimeout(100);
+    await pg.click('#v30Variants [data-v30="school"][data-mode="test"]');await pg.waitForTimeout(200);
+    const tid=await pids();
+    ok(tid.length===8&&tid.every(id=>id.startsWith('S34-')),'контрольная: 8 школьных задач');
+    ok(await pg.evaluate(ids=>new Set(ids.map(id=>V30.tasks.find(t=>t.id===id).skill)).size===8,tid),'контрольная: 8 разных тем');
+    ok((await pg.textContent('#v30Timer')).startsWith('40'),'на контрольную 40 минут');
+    for(let i=0;i<8;i++)await pg.fill('#v30a'+i,i===7?'0':await pg.evaluate(id=>V30.tasks.find(t=>t.id===id).answer,tid[i]));
+    await pg.click('#v30Finish');await pg.waitForTimeout(250);
+    ok((await pg.textContent('#v30Grade')).trim()==='5','7 из 8 верно → пятёрка');
+    const sp=await pg.evaluate(()=>({s:window.getP().v30.school,o:(window.getP().olympiads||[]).length}));
+    ok(sp.s.length===1&&sp.s[0].grade===5&&sp.s[0].score===7&&sp.o===0,'оценка в истории контрольных, в олимпиады не попала');
+    await pg.evaluate(()=>showHome('stats'));await pg.waitForTimeout(100);
+    ok(await vis('#v30SchoolHist'),'«Мой прогресс» показывает оценки за контрольные');
+    await pg.evaluate(()=>showHome('topics'));await pg.waitForTimeout(100);
+    await pg.click('#v30Topics [data-v30="topic"][data-skill="s_pct"]');await pg.waitForTimeout(150);
+    ok(await vis('#v30Work .badge.v30ahead'),'у задач 6 класса метка «🚀 6 класс»');
+    const a0=await pg.evaluate(()=>{const id=window.getP().v30.active.ids[0];return V30.tasks.find(t=>t.id===id).answer});
+    await pg.fill('#v30a0',a0);await pg.click('#v30c0');await pg.waitForTimeout(80);
+    ok((await pg.textContent('#v30f0')).includes('6 класса'),'за задачу 6 класса — отдельная похвала');
+    await pg.click('#v30Back');await pg.waitForTimeout(80);await pg.click('#v30Topics [data-v30="discard"]');await pg.waitForTimeout(80);
+    await pg.click('#v30TrackBar [data-track="olymp"]');await pg.waitForTimeout(100);
+    ok(await pg.$$eval('#v30Topics .v30skill [data-v30="topic"]',x=>x.every(b=>!b.dataset.skill.startsWith('s_'))&&x.length===20),'в олимпиадной ветке 20 олимпиадных тем');
+    await pg.evaluate(()=>showHome('variants'));await pg.waitForTimeout(80);
+    ok(await pg.$$eval('#v30Variants [data-v30="variant"][data-mode="olympiad"]',x=>x.length)===7,'после переключения снова 7 олимпиадных вариантов');
+    await pg.setViewportSize({width:375,height:800});await pg.waitForTimeout(80);
+    ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'переключатель веток на телефоне без горизонтальной прокрутки');
+    await pg.close();
+  }
+
+  console.log('14. Будильник: час занятий, цель по задачам, итоги');
+  {
+    const pg=await browser.newPage({viewport:{width:375,height:800}});pg.on('pageerror',e=>errors.push(e.message));pg.on('dialog',d=>d.accept());
+    const vis=sel=>pg.evaluate(s=>{const e=document.querySelector(s);return !!e&&!e.closest('[hidden]')&&!e.closest('.hidden')&&e.offsetParent!==null},sel);
+    await pg.clock.install();await pg.goto(URL);await pg.clock.runFor(800);
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await vis('#v30Modal #v30AlStart'),'кнопка ⏰ открывает настройку будильника');
+    ok(await pg.evaluate(()=>[+document.querySelector('#v30AlDur .on').dataset.val,+document.querySelector('#v30AlGoal .on').dataset.val].join())==='60,5','первый раз: 1 час и цель 5 задач');
+    ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'окно будильника на телефоне без горизонтальной прокрутки');
+    await pg.click('#v30AlStart');await pg.clock.runFor(1500);
+    ok(!!(await pg.$('#v30AlarmPill'))&&(await pg.textContent('#v30AlarmPill')).includes('0 из 5'),'идёт отсчёт, видна цель «0 из 5»');
+    ok(await vis('#v30Trainer'),'после старта открывается тренер');
+    await pg.click('#v30Trainer .v30focus [data-v30="trainer"]');await pg.clock.runFor(200);await pg.click('#v30GoPractice');await pg.clock.runFor(200);
+    for(const i of [0,1]){const a=await pg.evaluate(i=>{const id=window.getP().v30.active.ids[i];return V30.tasks.find(t=>t.id===id).answer},i);await pg.fill('#v30a'+i,a);await pg.click('#v30c'+i);await pg.clock.runFor(100);
+      if(await pg.$('#v30w'+i+' .v30whyopt'))await pg.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);document.querySelector(`#v30w${i} [data-val="${CSS.escape(t.why[0])}"]`)?.click()},i)}
+    await pg.fill('#v30a2','0x');await pg.click('#v30c2');await pg.clock.runFor(1200);
+    ok((await pg.textContent('#v30AlarmPill')).includes('2 из 5'),'решённые задачи засчитываются в цель: 2 из 5');
+    await pg.clock.runFor(60*60000);
+    ok(await vis('#v30Modal .v30alarmsum')&&(await pg.textContent('#v30AlarmTitle')).includes('Время вышло'),'через час будильник звонит и показывает итоги');
+    const sum=await pg.textContent('#v30Modal');
+    ok(sum.includes('2 из 5')&&sum.includes('На следующий раз')&&sum.includes('Что подтянуть'),'итоги: решено/цель, что подтянуть, что взять на следующий раз');
+    const rec=await pg.evaluate(()=>({...window.getP().v30.alarms[0],running:!!window.getP().v30.alarm}));
+    ok(rec&&rec.ind+rec.ast===2&&rec.goal===5&&!rec.met&&rec.min===60&&!rec.running,'занятие записано: 60 мин, 2 из 5, цель не выполнена');
+    ok(!(await pg.$('#v30AlarmPill')),'после звонка отсчёт убран');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>showHome('adaptive'));await pg.clock.runFor(100);
+    // цель выполнена → в следующий раз цель больше
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarms.unshift({ts:Date.now(),dur:60,min:60,goal:5,ind:5,ast:1,wrong:0,sk:{},met:true,early:false});window.setP(p)});
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await pg.evaluate(()=>+document.querySelector('#v30AlGoal .on').dataset.val)===10,'цель выполнена → следующая цель 10 задач');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarms=[60,60,60].map(()=>({ts:Date.now(),dur:60,min:60,goal:15,ind:16,ast:0,wrong:0,sk:{},met:true,early:false}));window.setP(p)});
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await pg.evaluate(()=>+document.querySelector('#v30AlDur .on').dataset.val)===90,'три часа подряд с целью → занятие 1,5 часа');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>showHome('stats'));await pg.clock.runFor(100);
+    ok(await vis('#v30Alarms')&&(await pg.textContent('#v30Alarms')).includes('Следующая цель'),'«Мой прогресс» показывает занятия по будильнику');
+    // будильник «прозвенел», пока вкладка была закрыта
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarm={start:Date.now()-2*3600000,dur:60,goal:5,c:{ind:1,ast:0,wrong:0},sk:{}};window.setP(p)});
+    await pg.reload();await pg.clock.runFor(800);
+    ok((await pg.textContent('#v30AlarmTitle')).includes('пока тренажёр был закрыт'),'после перезагрузки показаны итоги прошедшего занятия');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    // досрочное завершение
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);await pg.click('#v30AlStart');await pg.clock.runFor(1200);
+    await pg.click('#v30AlarmPill');await pg.clock.runFor(100);await pg.click('#v30AlStop');await pg.clock.runFor(100);
+    ok((await pg.textContent('#v30AlarmTitle')).includes('Занятие закончено')&&(await pg.evaluate(()=>window.getP().v30.alarms[0].early)),'занятие можно закончить досрочно');
+    await pg.close();
+  }
+
   ok(errors.length===0,'за весь прогон нет JS-ошибок '+JSON.stringify(errors));
   console.log(`\nИтог: ${passed} пройдено, ${failed} не пройдено`);
   await browser.close();process.exit(failed?1:0);
