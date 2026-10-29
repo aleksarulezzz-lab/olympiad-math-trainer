@@ -92,6 +92,13 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok(rev===1,'задача с ошибкой попала в работу над ошибками');
   const unseenBack=await page.evaluate(r=>!window.getP().v30.seen[r[3]]&&!window.getP().v30.seen[r[4]],route);
   ok(unseenBack,'нерешённые задачи вернулись в пул (не считаются увиденными)');
+  const today=await page.evaluate(()=>{const d=new Date(),k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return window.getP().v30.days[k]});
+  ok(today&&today.ind===1&&today.ast===1&&today.wrong===1&&today.sk[skill].join()==='1,1,1','дневник за сегодня: 1 сам., 1 с подсказкой, 1 ошибка — по навыку');
+  await page.click('#v30Result [data-v30="go"][data-to="stats"]');await wait(150);
+  const rep1=await page.textContent('#v30Today');
+  ok(rep1.includes('2задачи решены верно')&&rep1.includes('Что подтянуть'),'«Мой прогресс»: за сегодня 2 верно, 1 неверно, есть «Что подтянуть»');
+  ok(await visible('#v30Today [data-v30="trainer"]'),'у темы «подтянуть» есть кнопка тренировки');
+  ok(await visible('#v30Totals table'),'есть итог за все дни с таблицей по дням');
 
   console.log('3. Тренер находит просадку и объясняет именно её');
   await page.evaluate(()=>{const p=window.getP();p.v30.skills={};p.v30.skills.guarantee={n:6,ind:1,ast:0,wrong:5,recent:[0,0,1,0,0,0],last:Date.now()};p.v30.skills.logic={n:6,ind:6,ast:0,wrong:0,recent:[1,1,1,1,1,1],last:Date.now()};window.setP(p)});
@@ -143,7 +150,8 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   await page.click('#v30Back');await wait(100);
   await page.click('#v30Variants [data-v30="discard"]');await wait(100);
   await page.click('#tabStats');await wait(200);
-  ok((await page.textContent('#homeStats')).length>200,'«Мой прогресс» открывается после олимпиады');
+  ok(await visible('#v30Stats #v30Today')&&!(await visible('#homeStats')),'«Мой прогресс» открывается после олимпиады (новый экран)');
+  ok((await page.textContent('#v30Totals')).includes('пробных олимпиад: 1'),'итог за все дни учитывает олимпиаду');
 
   console.log('6. Все 5 вариантов различны, банк без дублей');
   const allV=await page.evaluate(()=>[1,2,3,4,5].map(n=>V30.variantTasks(n).map(t=>t.id)));
@@ -246,6 +254,23 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok(await visible('#homeAdmin #adminEmail'),'Ctrl+Shift+A открывает служебный вход');
   await page.click('#tabVariants');await wait(100);
   ok(await visible('#v30Variants')&&!(await visible('#homeAdmin')),'из админки можно вернуться к вариантам');
+
+  console.log('12. Время занятий: идёт только при активной работе');
+  {
+    const pg=await browser.newPage({viewport:{width:1100,height:900}});pg.on('pageerror',e=>errors.push(e.message));pg.on('dialog',d=>d.accept());
+    await pg.clock.install();await pg.goto(URL);await pg.clock.runFor(1000);
+    const sec=()=>pg.evaluate(()=>{const d=new Date(),k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return Math.round(((window.getP().v30.days||{})[k]||{}).sec||0)});
+    await pg.clock.runFor(120000);
+    ok(await sec()===0,'на главном экране время не идёт');
+    await pg.evaluate(()=>showHome('warm'));await pg.clock.runFor(200);await pg.click('#v30Warm [data-v30="warm"]');await pg.clock.runFor(200);
+    for(let m=0;m<3;m++){await pg.mouse.click(5,5);await pg.clock.runFor(60000)}
+    const s1=await sec();ok(s1>=170&&s1<=190,'3 минуты работы → ~3 мин в дневнике ('+s1+' сек)');
+    await pg.clock.runFor(20*60000);
+    const s2=await sec();ok(s2-s1<=5*60+10,'без действий засчитывается не больше 5 минут ('+(s2-s1)+' сек)');
+    await pg.evaluate(()=>showHome('stats'));await pg.clock.runFor(300);
+    ok((await pg.textContent('#v30Today')).includes('мин'),'время показано в отчёте за сегодня');
+    await pg.close();
+  }
 
   ok(errors.length===0,'за весь прогон нет JS-ошибок '+JSON.stringify(errors));
   console.log(`\nИтог: ${passed} пройдено, ${failed} не пройдено`);

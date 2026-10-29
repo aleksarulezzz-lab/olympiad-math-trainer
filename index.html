@@ -2246,6 +2246,16 @@ window.V23={version:'23.0',tasks:TASKS.length,newTasks:NEWTASKS.length,deepTasks
 .v30optfigs figure{margin:0;text-align:center}
 .v30optfigs figcaption{font-weight:800;margin-top:4px}
 .v30exText .v30figwrap{margin-top:10px}
+.v30stats .v30good b{color:var(--ok)}.v30stats .v30badn b{color:var(--bad)}
+.v30verdicts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.v30verdicts>div{border-radius:14px;padding:12px 14px;border:1px solid var(--b)}
+.v30verdicts h3{margin:0 0 6px;font-size:17px}.v30verdicts ul{margin:0;padding-left:18px}.v30verdicts li{margin:6px 0}
+.v30verdicts .v30btn.small{width:auto;padding:5px 10px;font-size:13px;margin-left:4px}
+.v30vgood{background:#f2fbf5}.v30vweak{background:#fff8ef}
+.v30okc{color:var(--ok);font-weight:700}.v30badc{color:var(--bad);font-weight:700}
+.v30table .v30bar{margin:0;min-width:60px}
+#parentDash .v30today{border:0;padding:0;margin:0 0 16px}
+@media(max-width:620px){.v30verdicts{grid-template-columns:1fr}}
 </style>
 <script id="v30-bank">
 /* ============================================================
@@ -2995,7 +3005,7 @@ function recordOutcome(t,outcome,hintsUsed){
   const p=P(),v=st(p);
   const s=v.skills[t.skill]=v.skills[t.skill]||{n:0,ind:0,ast:0,wrong:0,recent:[],last:0};
   s.n++;s[outcome]++;s.recent.push(outcome==='ind'?1:outcome==='ast'?0.5:0);if(s.recent.length>10)s.recent=s.recent.slice(-10);s.last=now();
-  v.res[t.id]={o:outcome,ts:now()};
+  v.res[t.id]={o:outcome,ts:now()};logOutcome(v,t,outcome);
   SAVE(p);
   try{if(typeof window.record==='function')window.record(t,outcome!=='wrong',hintsUsed||0)}catch(e){}
 }
@@ -3076,7 +3086,7 @@ function clearActive(){const p=P();st(p).active=null;SAVE(p)}
 function stopClock(){if(clock){clearInterval(clock);clock=null}}
 
 /* ---------- каркас экранов ---------- */
-const MINE={variants:'v30Variants',adaptive:'v30Trainer',topics:'v30Topics',warm:'v30Warm',parent:'homeParent'};
+const MINE={variants:'v30Variants',adaptive:'v30Trainer',topics:'v30Topics',warm:'v30Warm',stats:'v30Stats',parent:'homeParent'};
 const TABS=[['variants','🏆 Варианты'],['adaptive','🤖 Мой тренер'],['topics','🧩 Темы'],['warm','🔥 Разминка'],['stats','📈 Мой прогресс'],['world','🗺️ Мир'],['shopworld','🏡 Магазин мира'],['workshop','🧠 Мастерская'],['guide','📘 Как пользоваться'],['parent','👨‍👩‍👧 Родителю']];
 const tabId=x=>'tab'+(x==='shopworld'?'ShopWorld':x[0].toUpperCase()+x.slice(1));
 let prevShowHome=null;
@@ -3090,7 +3100,7 @@ function buildShell(){
   if(tabs){tabs.innerHTML='';for(const [x,label] of TABS){const b=document.createElement('button');b.className='tab';b.id=tabId(x);b.type='button';b.textContent=label;b.addEventListener('click',()=>window.showHome(x));tabs.appendChild(b)}}
   const after=tabs||home.firstChild;
   const mk=(id,html)=>{let e=$(id);if(!e){e=document.createElement('div');e.id=id;e.className='hidden v30screen';e.innerHTML=html||'';after.insertAdjacentElement('afterend',e)}return e};
-  mk('v30Warm');mk('v30Topics');mk('v30Trainer');mk('v30Variants');
+  mk('v30Stats');mk('v30Warm');mk('v30Topics');mk('v30Trainer');mk('v30Variants');
   if(!$('v30Work')){const w=document.createElement('section');w.id='v30Work';w.className='hidden';home.insertAdjacentElement('afterend',w)}
   if(!$('v30Result')){const r=document.createElement('section');r.id='v30Result';r.className='hidden result';$('v30Work').insertAdjacentElement('afterend',r)}
 }
@@ -3115,14 +3125,14 @@ function showHome(x){
   if(x==='admin'){setTab('');try{prevShowHome&&prevShowHome(x)}catch(e){}return}
   if(MINE[x]){
     $(MINE[x])?.classList.remove('hidden');setTab(x);
-    ({variants:renderVariants,adaptive:renderTrainer,topics:renderTopics,warm:renderWarm,parent:renderParent})[x]();
+    ({variants:renderVariants,adaptive:renderTrainer,topics:renderTopics,warm:renderWarm,stats:renderStatsV30,parent:renderParent})[x]();
     return;
   }
   try{prevShowHome&&prevShowHome(x)}catch(e){console.warn('V30: legacy screen',x,e)}
   // старые слои могли открыть «свои» экраны — гарантируем, что видна только нужная вкладка
   showScreen('home');setTab(x);
   document.querySelectorAll('#home > .v30screen').forEach(e=>e.classList.add('hidden'));
-  if(x==='stats'||x==='world')setTimeout(injectSkillMaps,30);
+  if(x==='world')setTimeout(injectSkillMaps,30);
   if(x==='guide')setTimeout(injectGuide,30);
 }
 
@@ -3217,12 +3227,13 @@ function renderParent(){
   const el=$('parentDash');if(!el)return;const p=P(),o=overall(p),v=st(p);
   const rows=SKILLS.map(s=>{const i=skillInfo(s.id,p);const x=v.skills[s.id]||{};return `<tr><td>${s.icon} ${esc(s.name)}</td><td>${x.n||0}</td><td>${x.ind||0}</td><td>${x.ast||0}</td><td>${x.wrong||0}</td><td>${i.rate===null?'—':Math.round(i.rate*100)+'%'}</td></tr>`}).join('');
   const w=weakestSkill(p);const ol=(p.olympiads||[]).slice(0,8).map(x=>`<li>${new Date(x.ts).toLocaleDateString('ru-RU')}: ${x.variant==='new'?'новый вариант':'вариант '+esc(x.variant)} — ${x.score}/${x.total}${x.minutes!=null?' · '+x.minutes+' мин':''}</li>`).join('');
-  el.innerHTML=`<p>Здесь — честная картина по реальным решениям в этом браузере. <b>«Самостоятельно»</b> — задача решена без подсказок и разбора; <b>«с подсказкой»</b> — после подсказки; <b>«ошибки»</b> — ответ не найден или открыт разбор.</p>
+  el.innerHTML=todayReportHtml(p)+`<p>Здесь — честная картина по реальным решениям в этом браузере. <b>«Самостоятельно»</b> — задача решена без подсказок и разбора; <b>«с подсказкой»</b> — после подсказки; <b>«ошибки»</b> — ответ не найден или открыт разбор.</p>
   <div class="v30stats"><div><b>${o.n}</b><small>задач</small></div><div><b>${o.ind}</b><small>самостоятельно</small></div><div><b>${o.ast}</b><small>с подсказкой</small></div><div><b>${(p.diagnostic&&p.diagnostic.completed)?p.diagnostic.level+' из 3':'—'}</b><small>диагностика</small></div></div>
   <div class="v30tablewrap"><table class="v30table"><thead><tr><th>Навык</th><th>Задач</th><th>Сам.</th><th>С подск.</th><th>Ошибки</th><th>Последние 8</th></tr></thead><tbody>${rows}</tbody></table></div>
   <p><b>Что сейчас стоит потренировать:</b> ${w?esc(SK[w.skill].name)+' — тренер предложит разбор метода и похожие задачи во вкладке «Мой тренер».':'явной просадки пока не видно (или данных мало).'}</p>
   ${ol?`<h3>Олимпиады</h3><ul>${ol}</ul>`:''}
-  <p class="v30muted small">Совет: 15–20 минут 3–4 раза в неделю дают больше, чем одна длинная тренировка. Хвалите не за ответ, а за рассуждение и за попытку разобраться в ошибке.</p>`;
+  <p class="v30muted small">Совет: 15–20 минут 3–4 раза в неделю дают больше, чем одна длинная тренировка. Хвалите не за ответ, а за рассуждение и за попытку разобраться в ошибке. Время по дням и итог за все дни — во вкладке «Мой прогресс».</p>`;
+  bindActions(el);
 }
 
 /* ---------- урок: разбор метода ---------- */
@@ -3514,6 +3525,86 @@ function renderPracticeResult(sess){
   bindActions(el);
 }
 
+/* ---------- дневник занятий: время и ответы по дням ---------- */
+// p.v30.days['ГГГГ-ММ-ДД'] = {sec, ind, ast, wrong, sk:{навык:[ind,ast,wrong]}}. Только localStorage этого браузера.
+// Время идёт, пока открыт экран задач, урока или разбора, вкладка на виду и ребёнок что-то делал за последние 5 минут.
+const IDLE_MS=5*60000,TICK_MS=5000;
+function dayKey(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function dayRec(v,k){const d=v.days=v.days&&typeof v.days==='object'?v.days:{};const r=d[k]=d[k]||{sec:0,ind:0,ast:0,wrong:0,sk:{}};r.sk=r.sk||{};return r}
+function logOutcome(v,t,outcome){
+  const r=dayRec(v,dayKey());r[outcome]=(r[outcome]||0)+1;
+  const s=r.sk[t.skill]=r.sk[t.skill]||[0,0,0];s[outcome==='ind'?0:outcome==='ast'?1:2]++;
+}
+let lastInput=now(),trackTimer=null,lastTick=now();
+function studying(){const w=$('v30Work'),r=$('v30Result');return document.visibilityState!=='hidden'&&((w&&!w.classList.contains('hidden'))||(r&&!r.classList.contains('hidden')))}
+function trackTick(){
+  const t=now(),delta=Math.min(t-lastTick,TICK_MS*2);lastTick=t;
+  if(!studying()||t-lastInput>IDLE_MS||delta<=0)return;
+  const p=P(),v=st(p),r=dayRec(v,dayKey());r.sec=(r.sec||0)+delta/1000;SAVE(p);
+}
+function startTracker(){
+  if(trackTimer)return;
+  const touch=()=>{lastInput=now()};
+  ['pointerdown','keydown','input','touchstart','scroll','wheel'].forEach(e=>addEventListener(e,touch,{passive:true,capture:true}));
+  document.addEventListener('visibilitychange',()=>{lastTick=now();if(document.visibilityState==='visible')touch()});
+  trackTimer=setInterval(trackTick,TICK_MS);
+}
+
+/* ---------- экран «Мой прогресс» ---------- */
+function fmtMin(sec){const m=Math.round((sec||0)/60);if(m<60)return m+' мин';const h=Math.floor(m/60),r=m%60;return h+' ч'+(r?' '+r+' мин':'')}
+function dayLabel(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'long'})}
+// Все дни: новые записи дневника + старые (до дневника) из p.daily, там время приблизительное.
+function allDays(p){
+  const v=st(p),out={};
+  for(const [k,x] of Object.entries(p.daily||{})){if(!x||(!x.attempts&&(x.seconds||0)<60))continue;out[k]={sec:x.seconds||0,ok:x.correct||0,wrong:Math.max(0,(x.attempts||0)-(x.correct||0)),ind:null,old:true}}
+  for(const [k,x] of Object.entries(v.days||{})){const n=(x.ind||0)+(x.ast||0)+(x.wrong||0);if(!n&&(x.sec||0)<60)continue;out[k]={sec:x.sec||0,ok:(x.ind||0)+(x.ast||0),wrong:x.wrong||0,ind:x.ind||0,ast:x.ast||0,old:false}}
+  return Object.entries(out).sort((a,b)=>b[0].localeCompare(a[0]));
+}
+function skillVerdicts(sk){ // sk: {навык:[ind,ast,wrong]} → что хорошо / что подтянуть
+  const rows=Object.entries(sk||{}).filter(([id])=>SK[id]).map(([id,a])=>{const n=a[0]+a[1]+a[2];return {id,n,ind:a[0],ast:a[1],wrong:a[2],score:n?(a[0]+0.5*a[1])/n:0}});
+  const good=rows.filter(r=>r.wrong===0&&r.score>=0.75).sort((a,b)=>b.n-a.n||b.score-a.score);
+  const weak=rows.filter(r=>r.wrong>0||r.score<0.5).sort((a,b)=>a.score-b.score||b.wrong-a.wrong);
+  return {good,weak};
+}
+function skillLine(r){return `${r.n} ${plural(r.n,'задача','задачи','задач')}: сам(а) ${r.ind}${r.ast?', с подсказкой '+r.ast:''}${r.wrong?', ошибок '+r.wrong:''}`}
+function trainBtn(id){return `<button class="v30btn small" data-v30="trainer" data-skill="${esc(id)}">Потренировать</button>`}
+function todayReportHtml(p){
+  const v=st(p),k=dayKey(),r=(v.days||{})[k]||{sec:0,ind:0,ast:0,wrong:0,sk:{}};
+  const ok=(r.ind||0)+(r.ast||0),n=ok+(r.wrong||0),acc=n?Math.round((r.ind||0)/n*100):null;
+  const head=`<h2>📅 Сегодня, ${esc(new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}</h2>`;
+  if(!n&&(r.sec||0)<60)return `<div class="modebox v30today" id="v30Today">${head}<p>Сегодня занятий ещё не было. Как только ребёнок начнёт решать, здесь появятся время, верные и неверные ответы и подсказка, что подтянуть.</p><div class="actions"><button class="v30btn" data-v30="go" data-to="adaptive">🤖 Начать с тренером</button></div></div>`;
+  const {good,weak}=skillVerdicts(r.sk);
+  const li=(arr,btn)=>arr.slice(0,3).map(x=>`<li><b>${SK[x.id].icon} ${esc(SK[x.id].name)}</b> <span class="v30muted">— ${skillLine(x)}</span>${btn?' '+trainBtn(x.id):''}</li>`).join('');
+  return `<div class="modebox v30today" id="v30Today">${head}
+  <div class="v30stats"><div><b>${fmtMin(r.sec)}</b><small>занимался(ась)</small></div><div class="v30good"><b>${ok}</b><small>${plural(ok,'задача решена','задачи решены','задач решено')} верно</small></div><div class="v30badn"><b>${r.wrong||0}</b><small>неверно (ошибка или разбор)</small></div><div><b>${acc===null?'—':acc+'%'}</b><small>решено самостоятельно</small></div></div>
+  ${r.ast?`<p class="v30muted small">Из верных ${r.ast} — после подсказки.</p>`:''}
+  <div class="v30verdicts"><div class="v30vgood"><h3>💪 Что сегодня хорошо</h3>${good.length?`<ul>${li(good)}</ul>`:'<p class="v30muted">Пока ни одна тема не решена без ошибок — это нормально, главное разобраться в разборе.</p>'}</div>
+  <div class="v30vweak"><h3>🎯 Что подтянуть</h3>${weak.length?`<ul>${li(weak,true)}</ul>`:'<p class="v30muted">Сегодня ошибок не было. Можно взять задачи посложнее или пройти вариант олимпиады.</p>'}</div></div></div>`;
+}
+function totalsHtml(p){
+  const v=st(p),days=allDays(p),o=overall(p);
+  const sec=days.reduce((s,[,x])=>s+x.sec,0),approx=days.some(([,x])=>x.old);
+  const wrong=o.n-o.ind-o.ast;
+  const ol=(p.olympiads||[]).filter(x=>x&&x.total);const best=ol.reduce((m,x)=>Math.max(m,x.score),0);
+  const rows=days.slice(0,30).map(([k,x])=>{const n=x.ok+x.wrong,pct=n?Math.round(x.ok/n*100):0;return `<tr><td>${esc(dayLabel(k))}</td><td>${x.old?'≈ ':''}${fmtMin(x.sec)}</td><td>${n}</td><td class="v30okc">${x.ok}</td><td class="v30badc">${x.wrong}</td><td><div class="v30bar"><i style="width:${pct}%"></i></div></td></tr>`}).join('');
+  const strong=SKILLS.map(s=>({s,i:skillInfo(s.id,p)})).filter(x=>x.i.n>=3&&x.i.rate>=0.75).sort((a,b)=>b.i.rate-a.i.rate);
+  const weak=SKILLS.map(s=>({s,i:skillInfo(s.id,p)})).filter(x=>x.i.n>=3&&x.i.rate<0.6).sort((a,b)=>a.i.rate-b.i.rate);
+  const untouched=SKILLS.filter(s=>!skillInfo(s.id,p).n);
+  const nm=x=>`${x.s.icon} ${esc(x.s.name)} (${Math.round(x.i.rate*100)}%)`;
+  return `<div class="modebox" id="v30Totals"><h2>🗓️ Итог за все дни</h2>
+  <div class="v30stats"><div><b>${days.length}</b><small>${plural(days.length,'день','дня','дней')} с занятиями</small></div><div><b>${approx?'≈ ':''}${fmtMin(sec)}</b><small>всего занятий</small></div><div><b>${o.n}</b><small>задач решалось</small></div><div><b>${o.n?Math.round(o.ind/o.n*100)+'%':'—'}</b><small>самостоятельно</small></div></div>
+  <p>Верно: <b>${o.ind+o.ast}</b> (сам(а) ${o.ind}, с подсказкой ${o.ast}) · неверно: <b>${wrong}</b>${ol.length?` · пробных олимпиад: <b>${ol.length}</b>, лучший результат ${best}/${ol[0].total}`:''}.</p>
+  <div class="v30verdicts"><div class="v30vgood"><h3>💪 Получается стабильно</h3>${strong.length?`<p>${strong.slice(0,4).map(nm).join(', ')}</p>`:'<p class="v30muted">Пока мало данных: нужно хотя бы 3 задачи в теме.</p>'}</div>
+  <div class="v30vweak"><h3>🎯 Главное, что подтянуть</h3>${weak.length?`<ul>${weak.slice(0,3).map(x=>`<li>${nm(x)} ${trainBtn(x.s.id)}</li>`).join('')}</ul>`:'<p class="v30muted">Явной просадки нет (или данных мало).</p>'}${untouched.length?`<p class="v30muted small">Ещё не пробовали: ${untouched.map(s=>esc(s.name)).join(', ')}.</p>`:''}</div></div>
+  ${rows?`<h3>По дням</h3><div class="v30tablewrap"><table class="v30table"><thead><tr><th>День</th><th>Время</th><th>Задач</th><th>Верно</th><th>Неверно</th><th>Доля верных</th></tr></thead><tbody>${rows}</tbody></table></div>${approx?'<p class="v30muted small">≈ — дни до обновления тренажёра: тогда время считалось грубо (вместе с паузами).</p>':''}`:''}
+  <p class="v30muted small">«Верно» — ответ найден, в том числе после подсказки. «Неверно» — ответ не найден или открыт разбор. Время считается, только пока открыты задачи или разбор и ребёнок что-то делает (пауза больше 5 минут не считается). Всё хранится только в этом браузере.</p></div>`;
+}
+function renderStatsV30(){
+  const el=$('v30Stats');if(!el)return;const p=P();
+  el.innerHTML=todayReportHtml(p)+totalsHtml(p)+`<div class="modebox"><h2>🗺️ Навыки (по последним решениям)</h2>${skillMapHtml()}<p class="v30muted small">Процент — доля задач, решённых самостоятельно, среди последних 8 задач навыка.</p></div>`;
+  bindActions(el);
+}
+
 /* ---------- дополнения к экранам старых слоёв ---------- */
 function skillMapHtml(){
   const p=P();return `<div class="v30skills compact">${SKILLS.map(s=>{const i=skillInfo(s.id,p),pct=i.rate===null?0:Math.round(i.rate*100);return `<article class="v30skill"><div class="v30skillHead"><b>${s.icon} ${esc(s.name)}</b><span>${i.rate===null?'—':pct+'%'}</span></div><div class="v30bar"><i style="width:${pct}%"></i></div><small>${i.n} ${plural(i.n,'задача','задачи','задач')} · самостоятельно ${i.ind}</small></article>`}).join('')}</div>`;
@@ -3593,7 +3684,7 @@ function install(){
   window.__V26Session={saveDraft:persist,restore:resume,clearDraft:()=>{},hasDraft:()=>false,active:()=>false};
   window.V30={version:'32.0',figSvg,fmtAnswer,tasks:TASKS,skills:SKILLS,selfTest,isCorrect,level,weakestSkill,overall,variantTasks,
     debug:()=>{const p=P();return {bank:TASKS.length,train:TRAIN.length,fresh:freshOf(TRAIN,p).length,level:level(p),weak:weakestSkill(p),active:getActive()}}};
-  migrate();migrate31();migrate32();
+  migrate();migrate31();migrate32();startTracker();
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&S)persist()});
   window.addEventListener('pagehide',()=>{if(S)persist()});
   window.showHome('variants');
