@@ -315,6 +315,9 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
     const s2=await sec();ok(s2-s1<=5*60+10,'без действий засчитывается не больше 5 минут ('+(s2-s1)+' сек)');
     await pg.evaluate(()=>showHome('stats'));await pg.clock.runFor(300);
     ok((await pg.textContent('#v30Today')).includes('мин'),'время показано в отчёте за сегодня');
+    ok(await pg.evaluate(()=>{const g=document.querySelector('#v30Hero #game');return !!g&&g.offsetParent!==null&&/XP/.test(g.textContent)}),'в «Моём прогрессе» виден герой и XP');
+    await pg.evaluate(()=>{showHome('variants');showHome('stats')});await pg.clock.runFor(200);
+    ok(await pg.evaluate(()=>!!document.querySelector('#v30Hero #game')&&document.querySelectorAll('#game').length===1),'герой не пропадает при повторном открытии вкладки');
     await pg.close();
   }
 
