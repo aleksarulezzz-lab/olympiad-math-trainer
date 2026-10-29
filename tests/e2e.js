@@ -31,7 +31,7 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
     await page.fill('#v30a'+i,'0x');await page.click('#v30c'+i);await page.fill('#v30a'+i,'0y');await page.click('#v30c'+i);
   }
   async function setAns(i,val){
-    const t=await page.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);return {type:t.type||'',rows:(t.rows||[]).length}},i);
+    const t=await page.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);return {type:document.getElementById('v30a'+i).type==='hidden'?t.type||'':'',rows:(t.rows||[]).length}},i);
     if(t.type==='choice')return page.click(`[data-v30opt="${i}"][data-val="${val}"]`);
     if(t.type==='multi'){for(const v of String(val).split(';'))await page.click(`[data-v30opt="${i}"][data-val="${v}"]`);return}
     if(t.type==='match'){const parts=String(val).split('|');for(let k=0;k<parts.length;k++)await page.selectOption(`[data-v30match="${i}"][data-r="${k}"]`,parts[k]);return}
@@ -141,6 +141,9 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok(await page.inputValue('#v30a4')===String(await ans(v3[4])),'ответы сохранились после перезагрузки');
   ok(await page.evaluate(()=>!document.getElementById('v30a0').disabled),'ответы можно менять до завершения');
   dialogAnswer=true;await page.click('#v30Finish');await wait(250);
+  ok(await page.$$eval('#v30Tasks .v30just',x=>x.length)===5,'после сдачи ответов — обоснования к 5 верным ответам');
+  ok(await page.$$eval('#v30Work input.answer',x=>x.length)===0,'на шаге обоснований ответы уже не поменять');
+  await page.click('#v30Finish');await wait(250);
   ok((await page.textContent('#v30Result .score')).trim()==='5 / 8','результат 5 / 8');
   const p1=await page.evaluate(()=>{const p=window.getP();return {ol:(p.olympiads||[]).length,best:p.v30.variants[3]&&p.v30.variants[3].best,active:p.v30.active}});
   ok(p1.ol===1&&p1.best===5&&!p1.active,'результат записан в историю, черновик удалён');
@@ -182,25 +185,68 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
   ok((await page.textContent('#v30f1')).includes('Пока неверно'),'неверный выбор варианта не засчитан');
   ok(!(await page.$eval('[data-v30opt="1"]',b=>b.disabled)),'после ошибки можно выбрать другой вариант');
   await setAns(1,await ans(v2[1]));await page.click('#v30c1');await wait(30);
-  ok((await page.textContent('#v30f1')).includes('Верно'),'«выбери вариант»: верный ответ засчитан');
+  ok((await page.textContent('#v30f1')).includes('Ответ верный'),'«выбери вариант»: верный ответ засчитан');
+  ok(await visible('#v30w1'),'после верного ответа — шаг «выбери верное рассуждение»');
+  const why=id=>page.evaluate(id=>V30.tasks.find(t=>t.id===id).why,id);
+  await page.click(`[data-v30why="1"][data-val="${(await why(v2[1]))[0]}"]`);await wait(30);
+  ok((await page.textContent('#v30f1')).includes('со второй попытки'),'верный выбор со второй попытки не считается самостоятельным');
   await setAns(7,await ans(v2[7]));await page.click('#v30c7');await wait(30);
-  ok((await page.textContent('#v30f7')).includes('Верно'),'«сопоставь»: верный ответ засчитан');
+  ok((await page.textContent('#v30f7')).includes('Ответ верный'),'«сопоставь»: верный ответ засчитан');
+  await page.click(`[data-v30why="7"][data-val="${(await why(v2[7]))[0]}"]`);await wait(30);
+  ok((await page.textContent('#v30f7')).includes('Решено самостоятельно')&&(await page.textContent('#v30f7')).includes('7 баллов'),'верное рассуждение с первой попытки — полное решение');
+  await setAns(0,await ans(v2[0]));await page.click('#v30c0');await wait(30);
+  await page.click(`[data-v30why="0"][data-val="${(await why(v2[0]))[1]}"]`);await wait(30);
+  ok((await page.textContent('#v30f0')).includes('рассуждение выбрано неверно'),'неверное рассуждение: показано верное');
+  const o7=await page.evaluate(id=>window.getP().v30.res[id].o,v2[0]);
+  ok(o7==='ast','ответ без верного рассуждения не считается самостоятельным');
   await page.click('#v30Back');await wait(80);await page.click('#v30Variants [data-v30="discard"]');await wait(80);
   await page.click('#v30Variants [data-v30="variant"][data-n="1"][data-mode="olympiad"]');await wait(150);
   const v1=await ids();
-  await setAns(7,'6;7');await wait(300);
+  ok(await page.$$eval('#v30Tasks [data-v30opt]',x=>x.length)===0,'в олимпиаде нет вариантов ответа — только поля');
+  ok(await page.$$eval('#v30Tasks .v30just',x=>x.length)===0,'пока ответы не сданы, рассуждения не показываются (они подсказали бы ответ)');
+  await setAns(7,'6, 7');await wait(300);
   await page.click('#v30Back');await wait(100);await page.reload();await wait(700);
   await page.click('#v30Variants [data-v30="resume"]');await wait(200);
-  ok(await page.$$eval('[data-v30opt="7"].sel',x=>x.length)===2,'«выбери все»: выбор сохранился после перезагрузки');
-  await setAns(7,'8;9');for(let i=0;i<7;i++)await setAns(i,await ans(v1[i]));
+  ok(await page.inputValue('#v30a7')==='6, 7','«найдите все»: ответ сохранился после перезагрузки');
+  await setAns(7,'6, 7, 8, 9');for(let i=0;i<7;i++)await setAns(i,await ans(v1[i]));
   await page.click('#v30Finish');await wait(200);
-  ok((await page.textContent('#v30Result .score')).trim()==='8 / 8','олимпиада с новыми форматами: 8 / 8');
-  ok((await page.textContent('#v30Result')).includes('6, 7, 8, 9'),'ответ «выбери все» показан в разборе понятно');
+  const w1=await page.evaluate(r=>r.map(id=>V30.tasks.find(t=>t.id===id).why[0]),v1);
+  ok(await page.$$eval('#v30Tasks .v30just',x=>x.length)===8,'шаг обоснований: все 8 верных ответов');
+  await page.click(`[data-v30why="0"][data-val="${w1[0]}"]`);await wait(300);
+  await page.click('#v30Back');await wait(100);await page.reload();await wait(700);
+  await page.click('#v30Variants [data-v30="resume"]');await wait(200);
+  ok(await page.$$eval('[data-v30why="0"].sel',x=>x.length)===1,'после перезагрузки открывается шаг обоснований с выбором');
+  for(let i=1;i<6;i++)await page.click(`[data-v30why="${i}"][data-val="${w1[i]}"]`);
+  await page.click('#v30Finish');await wait(200);
+  ok((await page.textContent('#v30Result .score')).trim()==='8 / 8','олимпиада без вариантов ответа: 8 / 8');
+  ok((await page.textContent('#v30Result')).includes('6, 7, 8, 9'),'ответ «найдите все» показан в разборе понятно');
+  ok((await page.textContent('#v30Result .v30pts')).includes('46 из 56'),'баллы как на олимпиаде: 6 задач по 7 и 2 задачи без обоснования по 2');
+  ok(await page.evaluate(()=>window.getP().olympiads[0].pts===46),'баллы записаны в историю');
+
+  console.log('7в. Новые темы, уровень 4 и варианты повышенной сложности');
+  const nv=await page.evaluate(()=>({sk:['spatial','construct','cutting','weigh','rebus','tournament'].every(s=>V30.skills.some(x=>x.id===s)),l4:V30.tasks.filter(t=>t.lvl===4).length,v6:V30.variantTasks(6).length,v7:V30.variantTasks(7).length}));
+  ok(nv.sk,'6 новых тем в списке навыков');
+  ok(nv.l4>=10,'есть задачи уровня 4: '+nv.l4);
+  ok(nv.v6===8&&nv.v7===8,'варианты 6 и 7 — по 8 задач');
+  await page.evaluate(()=>showHome('variants'));await wait(80);
+  ok(await page.$$eval('#v30Variants [data-v30="variant"][data-mode="olympiad"]',x=>x.length)===7,'на экране 7 вариантов');
+  await page.click('#v30Variants [data-v30="variant"][data-n="6"][data-mode="practice"]');await wait(150);
+  ok((await ids()).every(id=>id.startsWith('V33-6-')),'открыт вариант 6');
+  await page.click('#v30Back');await wait(80);await page.click('#v30Variants [data-v30="discard"]');await wait(80);
+  await page.evaluate(()=>showHome('topics'));await wait(80);
+  await page.click('#v30Topics [data-v30="topic"][data-skill="construct"]');await wait(150);
+  ok((await ids()).length===5,'тема «Построй пример» запускается');
+  await page.fill('#v30a0','123');await page.click('#v30Back');await wait(80);await page.click('#v30Topics [data-v30="discard"]');await wait(80);
+  await page.click('#v30Topics [data-v30="topic"][data-skill="rebus"]');await wait(150);
+  ok(await page.evaluate(()=>window.getP().v30.active.ans.every(x=>!x)),'новая сессия начинается с пустыми ответами (ответы прошлой не переносятся)');
+  await page.click('#v30Back');await wait(80);await page.click('#v30Topics [data-v30="discard"]');await wait(80);
+  const vr=await page.evaluate(()=>{const f=id=>V30.tasks.find(t=>t.id===id);return [V30.isCorrect(f('V33-CN02'),'1, 4, 2, 5, 3, 6'),!V30.isCorrect(f('V33-CN02'),'1, 2, 3, 4, 5, 6'),V30.isCorrect(f('V33-CN06'),'6 4 5 7 3 2'),V30.isCorrect(f('V33-CN05'),'48, 36, 24, 12'),!V30.isCorrect(f('V33-CN05'),'12, 24, 36'),V30.isCorrect(f('V33-7-5'),'4,5'),V30.isCorrect(f('V33-7-5'),'4.5'),V30.isCorrect(f('V33-CN10'),'Нет, нельзя')]});
+  ok(vr.every(Boolean),'проверка расстановок принимает любой верный ответ: '+JSON.stringify(vr));
 
   console.log('8. Проверка ответов');
   const chk=await page.evaluate(()=>{const f=id=>V30.tasks.find(t=>t.id===id);return [
     V30.isCorrect(f('F29V1-09'),'3'),!V30.isCorrect(f('F29V1-09'),'4'),V30.isCorrect(f('QH4'),'320 ягод'),
-    V30.isCorrect(f('V30-V5-04'),'за второй дверью'),V30.isCorrect(f('V31-1-8'),'9;8;7;6'),!V30.isCorrect(f('V31-1-8'),'6;7;8'),V30.isCorrect(f('V31-2-8'),'футбол|плавание|теннис|шахматы'),!V30.isCorrect(f('V31-2-8'),'плавание|футбол|теннис|шахматы'),V30.isCorrect(f('F29V1-08'),'Да, можно'),V30.isCorrect(f('F29V2-04'),'Математику'),
+    V30.isCorrect(f('V30-V5-04'),'за второй дверью'),V30.isCorrect(f('V31-1-8'),'9;8;7;6'),V30.isCorrect(f('V31-1-8'),'6, 7, 8, 9'),!V30.isCorrect(f('V31-1-8'),'6;7;8'),V30.isCorrect(f('V31-2-8'),'футбол|плавание|теннис|шахматы'),!V30.isCorrect(f('V31-2-8'),'плавание|футбол|теннис|шахматы'),V30.isCorrect(f('F29V1-08'),'Да, можно'),V30.isCorrect(f('F29V2-04'),'Математику'),
     V30.isCorrect(f('F29V4-10'),'нельзя'),!V30.isCorrect(f('F29V1-01'),'1207')]});
   ok(chk.every(Boolean),'нормализация ответов: '+JSON.stringify(chk));
 
@@ -272,6 +318,99 @@ function ok(cond,msg){if(cond){passed++;console.log('  ✓',msg)}else{failed++;c
     ok(await pg.evaluate(()=>{const g=document.querySelector('#v30Hero #game');return !!g&&g.offsetParent!==null&&/XP/.test(g.textContent)}),'в «Моём прогрессе» виден герой и XP');
     await pg.evaluate(()=>{showHome('variants');showHome('stats')});await pg.clock.runFor(200);
     ok(await pg.evaluate(()=>!!document.querySelector('#v30Hero #game')&&document.querySelectorAll('#game').length===1),'герой не пропадает при повторном открытии вкладки');
+    await pg.close();
+  }
+
+  console.log('13. Две ветки: олимпиада и «Школа на шаг вперёд»');
+  {
+    const pg=await browser.newPage({viewport:{width:1100,height:900}});pg.on('pageerror',e=>errors.push(e.message));pg.on('dialog',d=>d.accept());
+    const vis=sel=>pg.evaluate(s=>{const e=document.querySelector(s);return !!e&&!e.closest('.hidden')&&e.offsetParent!==null},sel);
+    const pids=()=>pg.evaluate(()=>{const a=window.getP().v30.active;return a?a.ids:[]});
+    await pg.goto(URL);await pg.waitForTimeout(500);
+    ok(await vis('#v30TrackPick'),'при первом входе предлагается выбрать ветку');
+    ok((await pg.textContent('#tabVariants')).includes('Варианты'),'по умолчанию — олимпиадная ветка');
+    await pg.click('#v30TrackPick [data-track="school"]');await pg.waitForTimeout(150);
+    ok(await pg.evaluate(()=>V30.track())==='school'&&!(await vis('#v30TrackPick')),'выбрана школьная ветка, выбор больше не мешает');
+    ok((await pg.textContent('#tabVariants')).includes('Контрольные'),'вкладка «Варианты» стала «Контрольные»');
+    ok(await pg.$$eval('#v30Variants .v30skill',x=>x.length)===10,'в школьной ветке 10 тем (5 и 6 класс)');
+    await pg.evaluate(()=>showHome('adaptive'));await pg.waitForTimeout(100);
+    const sk=await pg.$$eval('#v30Trainer .v30skill [data-v30="trainer"]',x=>x.map(b=>b.dataset.skill));
+    ok(sk.length===10&&sk.every(x=>x.startsWith('s_')),'тренер показывает только школьные темы');
+    await pg.evaluate(()=>showHome('variants'));await pg.waitForTimeout(100);
+    await pg.click('#v30Variants [data-v30="school"][data-mode="test"]');await pg.waitForTimeout(200);
+    const tid=await pids();
+    ok(tid.length===8&&tid.every(id=>id.startsWith('S34-')),'контрольная: 8 школьных задач');
+    ok(await pg.evaluate(ids=>new Set(ids.map(id=>V30.tasks.find(t=>t.id===id).skill)).size===8,tid),'контрольная: 8 разных тем');
+    ok((await pg.textContent('#v30Timer')).startsWith('40'),'на контрольную 40 минут');
+    for(let i=0;i<8;i++)await pg.fill('#v30a'+i,i===7?'0':await pg.evaluate(id=>V30.tasks.find(t=>t.id===id).answer,tid[i]));
+    await pg.click('#v30Finish');await pg.waitForTimeout(250);
+    ok((await pg.textContent('#v30Grade')).trim()==='5','7 из 8 верно → пятёрка');
+    const sp=await pg.evaluate(()=>({s:window.getP().v30.school,o:(window.getP().olympiads||[]).length}));
+    ok(sp.s.length===1&&sp.s[0].grade===5&&sp.s[0].score===7&&sp.o===0,'оценка в истории контрольных, в олимпиады не попала');
+    await pg.evaluate(()=>showHome('stats'));await pg.waitForTimeout(100);
+    ok(await vis('#v30SchoolHist'),'«Мой прогресс» показывает оценки за контрольные');
+    await pg.evaluate(()=>showHome('topics'));await pg.waitForTimeout(100);
+    await pg.click('#v30Topics [data-v30="topic"][data-skill="s_pct"]');await pg.waitForTimeout(150);
+    ok(await vis('#v30Work .badge.v30ahead'),'у задач 6 класса метка «🚀 6 класс»');
+    const a0=await pg.evaluate(()=>{const id=window.getP().v30.active.ids[0];return V30.tasks.find(t=>t.id===id).answer});
+    await pg.fill('#v30a0',a0);await pg.click('#v30c0');await pg.waitForTimeout(80);
+    ok((await pg.textContent('#v30f0')).includes('6 класса'),'за задачу 6 класса — отдельная похвала');
+    await pg.click('#v30Back');await pg.waitForTimeout(80);await pg.click('#v30Topics [data-v30="discard"]');await pg.waitForTimeout(80);
+    await pg.click('#v30TrackBar [data-track="olymp"]');await pg.waitForTimeout(100);
+    ok(await pg.$$eval('#v30Topics .v30skill [data-v30="topic"]',x=>x.every(b=>!b.dataset.skill.startsWith('s_'))&&x.length===20),'в олимпиадной ветке 20 олимпиадных тем');
+    await pg.evaluate(()=>showHome('variants'));await pg.waitForTimeout(80);
+    ok(await pg.$$eval('#v30Variants [data-v30="variant"][data-mode="olympiad"]',x=>x.length)===7,'после переключения снова 7 олимпиадных вариантов');
+    await pg.setViewportSize({width:375,height:800});await pg.waitForTimeout(80);
+    ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'переключатель веток на телефоне без горизонтальной прокрутки');
+    await pg.close();
+  }
+
+  console.log('14. Будильник: час занятий, цель по задачам, итоги');
+  {
+    const pg=await browser.newPage({viewport:{width:375,height:800}});pg.on('pageerror',e=>errors.push(e.message));pg.on('dialog',d=>d.accept());
+    const vis=sel=>pg.evaluate(s=>{const e=document.querySelector(s);return !!e&&!e.closest('[hidden]')&&!e.closest('.hidden')&&e.offsetParent!==null},sel);
+    await pg.clock.install();await pg.goto(URL);await pg.clock.runFor(800);
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await vis('#v30Modal #v30AlStart'),'кнопка ⏰ открывает настройку будильника');
+    ok(await pg.evaluate(()=>[+document.querySelector('#v30AlDur .on').dataset.val,+document.querySelector('#v30AlGoal .on').dataset.val].join())==='60,5','первый раз: 1 час и цель 5 задач');
+    ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'окно будильника на телефоне без горизонтальной прокрутки');
+    await pg.click('#v30AlStart');await pg.clock.runFor(1500);
+    ok(!!(await pg.$('#v30AlarmPill'))&&(await pg.textContent('#v30AlarmPill')).includes('0 из 5'),'идёт отсчёт, видна цель «0 из 5»');
+    ok(await vis('#v30Trainer'),'после старта открывается тренер');
+    await pg.click('#v30Trainer .v30focus [data-v30="trainer"]');await pg.clock.runFor(200);await pg.click('#v30GoPractice');await pg.clock.runFor(200);
+    for(const i of [0,1]){const a=await pg.evaluate(i=>{const id=window.getP().v30.active.ids[i];return V30.tasks.find(t=>t.id===id).answer},i);await pg.fill('#v30a'+i,a);await pg.click('#v30c'+i);await pg.clock.runFor(100);
+      if(await pg.$('#v30w'+i+' .v30whyopt'))await pg.evaluate(i=>{const id=window.getP().v30.active.ids[i];const t=V30.tasks.find(x=>x.id===id);document.querySelector(`#v30w${i} [data-val="${CSS.escape(t.why[0])}"]`)?.click()},i)}
+    await pg.fill('#v30a2','0x');await pg.click('#v30c2');await pg.clock.runFor(1200);
+    ok((await pg.textContent('#v30AlarmPill')).includes('2 из 5'),'решённые задачи засчитываются в цель: 2 из 5');
+    await pg.clock.runFor(60*60000);
+    ok(await vis('#v30Modal .v30alarmsum')&&(await pg.textContent('#v30AlarmTitle')).includes('Время вышло'),'через час будильник звонит и показывает итоги');
+    const sum=await pg.textContent('#v30Modal');
+    ok(sum.includes('2 из 5')&&sum.includes('На следующий раз')&&sum.includes('Что подтянуть'),'итоги: решено/цель, что подтянуть, что взять на следующий раз');
+    const rec=await pg.evaluate(()=>({...window.getP().v30.alarms[0],running:!!window.getP().v30.alarm}));
+    ok(rec&&rec.ind+rec.ast===2&&rec.goal===5&&!rec.met&&rec.min===60&&!rec.running,'занятие записано: 60 мин, 2 из 5, цель не выполнена');
+    ok(!(await pg.$('#v30AlarmPill')),'после звонка отсчёт убран');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>showHome('adaptive'));await pg.clock.runFor(100);
+    // цель выполнена → в следующий раз цель больше
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarms.unshift({ts:Date.now(),dur:60,min:60,goal:5,ind:5,ast:1,wrong:0,sk:{},met:true,early:false});window.setP(p)});
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await pg.evaluate(()=>+document.querySelector('#v30AlGoal .on').dataset.val)===10,'цель выполнена → следующая цель 10 задач');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarms=[60,60,60].map(()=>({ts:Date.now(),dur:60,min:60,goal:15,ind:16,ast:0,wrong:0,sk:{},met:true,early:false}));window.setP(p)});
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);
+    ok(await pg.evaluate(()=>+document.querySelector('#v30AlDur .on').dataset.val)===90,'три часа подряд с целью → занятие 1,5 часа');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    await pg.evaluate(()=>showHome('stats'));await pg.clock.runFor(100);
+    ok(await vis('#v30Alarms')&&(await pg.textContent('#v30Alarms')).includes('Следующая цель'),'«Мой прогресс» показывает занятия по будильнику');
+    // будильник «прозвенел», пока вкладка была закрыта
+    await pg.evaluate(()=>{const p=window.getP();p.v30.alarm={start:Date.now()-2*3600000,dur:60,goal:5,c:{ind:1,ast:0,wrong:0},sk:{}};window.setP(p)});
+    await pg.reload();await pg.clock.runFor(800);
+    ok((await pg.textContent('#v30AlarmTitle')).includes('пока тренажёр был закрыт'),'после перезагрузки показаны итоги прошедшего занятия');
+    await pg.click('#v30Modal [data-close]');await pg.clock.runFor(100);
+    // досрочное завершение
+    await pg.click('#v30TrackBar [data-v30="alarm"]');await pg.clock.runFor(100);await pg.click('#v30AlStart');await pg.clock.runFor(1200);
+    await pg.click('#v30AlarmPill');await pg.clock.runFor(100);await pg.click('#v30AlStop');await pg.clock.runFor(100);
+    ok((await pg.textContent('#v30AlarmTitle')).includes('Занятие закончено')&&(await pg.evaluate(()=>window.getP().v30.alarms[0].early)),'занятие можно закончить досрочно');
     await pg.close();
   }
 
